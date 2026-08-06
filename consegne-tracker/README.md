@@ -14,23 +14,26 @@ Non c'è un server dedicato: uso solo servizi che hai già.
 
 ## Setup iniziale (una tantum, ~10 minuti)
 
-### 1. Abilita i permessi di scrittura per le Actions
-Vai su **Settings → Actions → General → Workflow permissions** del repo `0NLyM/0NLyM` e seleziona **Read and write permissions**, poi salva. Serve perché lo workflow di controllo aggiorna `data/shipments.json` da solo.
+### 1. Abilita GitHub Actions per questo repository
+Su questo repo le Actions risultano **disattivate** (l'ho verificato: i workflow che ho aggiunto non partono, nemmeno manualmente, e non ho i permessi per riattivarle da qui). Vai su **Settings → Actions → General → Actions permissions** e seleziona **"Allow all actions and reusable workflows"**, poi salva. Senza questo passaggio l'app funziona per aggiungere/vedere i pacchi, ma nessuno stato verrà mai controllato e non arriverà nessuna notifica.
 
-### 2. Crea un token GitHub per l'app (lato telefono)
+### 2. Abilita i permessi di scrittura per le Actions
+Sempre in **Settings → Actions → General**, scorri a **Workflow permissions** e seleziona **Read and write permissions**, poi salva. Serve perché lo workflow di controllo aggiorna `data/shipments.json` da solo.
+
+### 3. Crea un token GitHub per l'app (lato telefono)
 Vai su **github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**:
 - Repository access: **solo** `0NLyM/0NLyM`
 - Permissions → Repository permissions → **Contents: Read and write**
 - Genera e copia il token (inizia con `github_pat_...`). Lo incollerai nell'app, nelle Impostazioni. Resta salvato solo sul tuo telefono (localStorage del browser), non viene mai inviato altrove.
 
-### 3. Crea una API key gratuita su 17TRACK
+### 4. Crea una API key gratuita su 17TRACK
 Registrati su [17track.net](https://www.17track.net) (piano gratuito), sezione API/Developer, e genera una **API key**.
 
 Poi vai su **Settings → Secrets and variables → Actions → New repository secret** in questo repo e aggiungi:
 - `TRACK17_API_KEY` = la tua chiave 17TRACK
 
-### 4. Aggiungi le chiavi per le notifiche push (VAPID)
-Sono già state generate per questa app. Aggiungi questi due secret (stesso posto del punto 3):
+### 5. Aggiungi le chiavi per le notifiche push (VAPID)
+Sono già state generate per questa app. Aggiungi questi due secret (stesso posto del punto 4):
 - `VAPID_PUBLIC_KEY` = `BFnzm5f83O45j5NxmSfRKOYNkwLfoB0cRke2M8no-wV-y71ZtNHjU_MfhUxSou8cqxDIkgbx9we-EkTJFulU1Ow`
 - `VAPID_PRIVATE_KEY` = `gP7AP_x_XOJQFf87fHWafafo_bg7uqT-ZEGUrJftDCM`
 
@@ -38,16 +41,16 @@ Facoltativo: `VAPID_CONTACT_EMAIL` = `mailto:tuaemail@esempio.it` (email di cont
 
 > La chiave pubblica è già scritta anche in `app.js`. La chiave privata **non deve mai finire nel codice**: resta solo come secret, la usa esclusivamente lo workflow di GitHub Actions.
 
-### 5. Pubblica GitHub Pages
-Il workflow `deploy-pages.yml` pubblica automaticamente l'app a ogni push su questo branch. Dopo il primo push, vai su **Settings → Pages** e verifica che la sorgente sia impostata su "GitHub Actions" (di solito lo fa da solo). L'URL sarà del tipo:
+### 6. Pubblica GitHub Pages
+Una volta abilitate le Actions (punto 1), il workflow `deploy-pages.yml` pubblica automaticamente l'app a ogni push su questo branch. Dopo il primo run, vai su **Settings → Pages** e verifica che la sorgente sia impostata su "GitHub Actions" (di solito lo fa da solo). L'URL sarà del tipo:
 
 `https://0nlym.github.io/0NLyM/`
 
-### 6. Installa l'app sul telefono Android
+### 7. Installa l'app sul telefono Android
 1. Apri l'URL sopra con **Chrome** su Android.
 2. Tocca il menu (⋮) → **Aggiungi a schermata Home** / **Installa app**.
 3. Apri l'app dall'icona: parte a schermo intero, tema nero.
-4. Tocca l'icona ingranaggio in alto → incolla il token GitHub del punto 2 → **Attiva notifiche push** → concedi il permesso.
+4. Tocca l'icona ingranaggio in alto → incolla il token GitHub del punto 3 → **Attiva notifiche push** → concedi il permesso.
 5. Aggiungi un pacco con il pulsante **+**: corriere, numero di tracking, etichetta facoltativa.
 
 Entro pochi minuti (o al prossimo controllo pianificato) lo stato viene aggiornato e, quando il pacco risulta "in consegna oggi", ricevi la notifica.
