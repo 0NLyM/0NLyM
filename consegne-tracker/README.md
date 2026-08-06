@@ -26,10 +26,10 @@ Vai su **github.com → Settings → Developer settings → Personal access toke
 - Permissions → Repository permissions → **Contents: Read and write**
 - Genera e copia il token (inizia con `github_pat_...`). Lo incollerai nell'app, nelle Impostazioni. Resta salvato solo sul tuo telefono (localStorage del browser), non viene mai inviato altrove.
 
-### 4. Crea una API key gratuita su 17TRACK
-Registrati su [17track.net](https://www.17track.net) (piano gratuito), sezione API/Developer, e genera una **API key**.
+### 4. Crea una API key gratuita su 17TRACK — *puoi saltare questo passaggio per ora*
+Senza questa chiave l'app funziona comunque: puoi installarla, aggiungere pacchi e vederli in lista, restano solo fermi su "In attesa di aggiornamento" finché non colleghi 17TRACK (il controllo automatico si accorge da solo che la chiave manca e non fa nulla, senza errori). Quando vorrai attivare il controllo automatico dello stato:
 
-Poi vai su **Settings → Secrets and variables → Actions → New repository secret** in questo repo e aggiungi:
+Registrati su [17track.net](https://www.17track.net) (piano gratuito), sezione API/Developer, e genera una **API key**. Poi vai su **Settings → Secrets and variables → Actions → New repository secret** in questo repo e aggiungi:
 - `TRACK17_API_KEY` = la tua chiave 17TRACK
 
 ### 5. Aggiungi le chiavi per le notifiche push (VAPID)
