@@ -1,0 +1,59 @@
+name: Check shipment status
+
+on:
+  schedule:
+    # NOTE: GitHub only runs scheduled workflows from the files on the
+    # repository's DEFAULT branch. Until this branch is merged, this job
+    # only runs via the push trigger below or manually.
+    - cron: "*/30 * * * *"
+  push:
+    branches: ["claude/delivery-tracking-app-rszzf5", "main"]
+    paths:
+      - "consegne-tracker/data/shipments.json"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "check-shipments"
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Avoid the loop where this job's own status-update commit re-triggers itself.
+    if: ${{ !contains(github.event.head_commit.message, '[status-update]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: consegne-tracker/scripts
+        run: npm install
+
+      - name: Run checker
+        working-directory: consegne-tracker
+        env:
+          TRACK17_API_KEY: ${{ secrets.TRACK17_API_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_CONTACT_EMAIL: ${{ secrets.VAPID_CONTACT_EMAIL }}
+        run: node scripts/check-shipments.mjs
+
+      - name: Commit updated status
+        run: |
+          git config user.name "consegne-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add consegne-tracker/data/shipments.json consegne-tracker/data/push-subscriptions.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Aggiorna stato spedizioni [status-update]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "Nessuna variazione di stato."
+          fi

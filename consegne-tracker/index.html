@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Traccia i pacchi dei corrieri italiani in un'unica app, tema AMOLED nero.">
+<title>Consegne Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Consegne</span>
+  </div>
+  <button id="btn-settings" class="icon-btn" aria-label="Impostazioni">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.14 12.94a7.14 7.14 0 0 0 .06-.94 7.14 7.14 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.05.24.26.42.5.42h3.84c.24 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 15.5 12 3.5 3.5 0 0 1 12 15.5Z"/></svg>
+  </button>
+</header>
+
+<main id="app">
+
+  <section id="empty-state" class="empty-state hidden">
+    <p class="empty-title">Nessuna spedizione</p>
+    <p class="empty-sub">Aggiungi un pacco con il pulsante in basso per iniziare a tracciarlo.</p>
+  </section>
+
+  <ul id="shipment-list" class="shipment-list" aria-live="polite"></ul>
+
+</main>
+
+<button id="btn-add" class="fab" aria-label="Aggiungi spedizione">
+  <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+</button>
+
+<!-- Add shipment sheet -->
+<div id="sheet-add" class="sheet-backdrop hidden">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-add-title">
+    <div class="sheet-handle"></div>
+    <h2 id="sheet-add-title">Nuova spedizione</h2>
+
+    <label class="field">
+      <span>Corriere</span>
+      <select id="input-courier">
+        <option value="Poste Italiane">Poste Italiane</option>
+        <option value="BRT">BRT (Bartolini)</option>
+        <option value="GLS">GLS</option>
+        <option value="SDA">SDA</option>
+        <option value="DHL Express">DHL Express</option>
+        <option value="UPS">UPS</option>
+        <option value="FedEx">FedEx</option>
+        <option value="TNT">TNT</option>
+        <option value="Amazon Logistics">Amazon Logistics</option>
+        <option value="InPost">InPost</option>
+        <option value="Nexive">Nexive</option>
+        <option value="Fercam">Fercam</option>
+        <option value="Altro">Altro</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span>Numero di tracking</span>
+      <input id="input-tracking" type="text" inputmode="text" autocomplete="off" placeholder="Es. 1Z999AA10123456784">
+    </label>
+
+    <label class="field">
+      <span>Etichetta (opzionale)</span>
+      <input id="input-label" type="text" autocomplete="off" placeholder="Es. Scarpe, regalo compleanno...">
+    </label>
+
+    <p id="add-error" class="form-error hidden"></p>
+
+    <div class="sheet-actions">
+      <button id="btn-cancel-add" class="btn btn-ghost" type="button">Annulla</button>
+      <button id="btn-confirm-add" class="btn btn-primary" type="button">Aggiungi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shipment detail sheet -->
+<div id="sheet-detail" class="sheet-backdrop hidden">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-detail-title">
+    <div class="sheet-handle"></div>
+    <h2 id="sheet-detail-title">Dettaglio</h2>
+    <div id="detail-body" class="detail-body"></div>
+    <div class="sheet-actions">
+      <button id="btn-delete" class="btn btn-danger" type="button">Elimina</button>
+      <button id="btn-close-detail" class="btn btn-primary" type="button">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings sheet -->
+<div id="sheet-settings" class="sheet-backdrop hidden">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-settings-title">
+    <div class="sheet-handle"></div>
+    <h2 id="sheet-settings-title">Impostazioni</h2>
+
+    <label class="field">
+      <span>GitHub Personal Access Token</span>
+      <input id="input-pat" type="password" autocomplete="off" placeholder="github_pat_...">
+    </label>
+    <p class="hint">Serve un token fine-grained con permesso <code>Contents: Read and write</code> solo su questo repository. Viene salvato solo su questo telefono.</p>
+
+    <button id="btn-notif" class="btn btn-outline" type="button">Attiva notifiche push</button>
+    <p id="notif-status" class="hint"></p>
+
+    <p id="settings-error" class="form-error hidden"></p>
+
+    <div class="sheet-actions">
+      <button id="btn-close-settings" class="btn btn-primary" type="button">Salva e chiudi</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
