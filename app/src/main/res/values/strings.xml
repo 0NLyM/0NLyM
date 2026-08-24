@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Glucose Glyph</string>
+    <string name="toy_name">Glucose</string>
+    <string name="toy_summary">Mostra il valore del glucosio dal tuo CGM (via ControlX2) sul Glyph Matrix.</string>
+</resources>

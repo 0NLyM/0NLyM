@@ -1,0 +1,8 @@
+<resources>
+    <color name="nothing_black">#FF000000</color>
+    <color name="nothing_off_black">#FF0A0A0A</color>
+    <color name="nothing_card">#FF141414</color>
+    <color name="nothing_white">#FFF5F5F0</color>
+    <color name="nothing_grey">#FF8A8A8A</color>
+    <color name="nothing_red">#FFE0122A</color>
+</resources>

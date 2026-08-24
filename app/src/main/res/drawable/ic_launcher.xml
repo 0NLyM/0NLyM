@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing-style dot-matrix launcher icon: black square, white 5x5 dot grid
+     forming a stylised drop, one red dot as the CGM accent. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/vector"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:fillColor="#FF000000" android:pathData="M0,0h108v108h0z" />
+
+    <group>
+        <path android:fillColor="#FFF5F5F0" android:pathData="M48,24 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M36,42 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M60,42 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M30,60 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M66,60 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M36,78 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFF5F5F0" android:pathData="M60,78 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+        <path android:fillColor="#FFE0122A" android:pathData="M48,84 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0" />
+    </group>
+</vector>
