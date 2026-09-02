@@ -22,6 +22,11 @@ jobs:
         with:
           channel: stable
 
+      - name: Bump Gradle wrapper version
+        working-directory: nothing-clock
+        run: |
+          sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.3-bin.zip#' android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Install dependencies
         working-directory: nothing-clock
         run: flutter pub get
