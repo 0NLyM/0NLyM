@@ -1,0 +1,30 @@
+name: Build Nothing Clock APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SushiiReboot/nothing-clock
+          path: nothing-clock
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        working-directory: nothing-clock
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: nothing-clock
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nothing-clock-apk
+          path: nothing-clock/build/app/outputs/flutter-apk/app-release.apk
