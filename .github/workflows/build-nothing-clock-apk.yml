@@ -22,10 +22,11 @@ jobs:
         with:
           channel: stable
 
-      - name: Bump Gradle wrapper version
+      - name: Bump Gradle wrapper and AGP version
         working-directory: nothing-clock
         run: |
           sed -i 's#distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14.3-bin.zip#' android/gradle/wrapper/gradle-wrapper.properties
+          sed -i "s#id \"com.android.application\" version '8.8.0'#id \"com.android.application\" version '8.12.1'#" android/settings.gradle
 
       - name: Install dependencies
         working-directory: nothing-clock
