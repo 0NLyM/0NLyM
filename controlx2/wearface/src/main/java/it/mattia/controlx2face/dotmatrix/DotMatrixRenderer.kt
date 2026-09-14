@@ -28,6 +28,15 @@ private const val CLOCK_PITCH_RATIO = 0.0356f
 /** Clock baseline, as a fraction of display height (top edge of the glyph block). */
 private const val CLOCK_TOP_RATIO = 0.213f
 
+/** Cell pitch for the glucose value, as a fraction of the display's shorter side. */
+private const val GLUCOSE_PITCH_RATIO = 0.0267f
+
+/** Top edge of the glucose glyph block, as a fraction of display height. */
+private const val GLUCOSE_TOP_RATIO = 0.45f
+
+/** Trend arrow pitch, relative to the glucose value's, so the arrow reads as the smaller mark. */
+private const val TREND_PITCH_RATIO = 0.8f
+
 class DotMatrixRenderer(
     surfaceHolder: SurfaceHolder,
     currentUserStyleRepository: CurrentUserStyleRepository,
@@ -103,15 +112,25 @@ class DotMatrixRenderer(
             else -> snapshot.glucoseMgdl.toString()
         }
 
-        val glucosePitchRatio = 0.0267f
-        val glucosePitch = minOf(bounds.width(), bounds.height()) * glucosePitchRatio
-        val glucoseX = bounds.exactCenterX() - DotGrid.measureText(glucoseText, PixelFont.valueDigitSets.getValue(PixelFont.DigitStyle.CURRENT), glucosePitch) / 2f
-        val glucoseY = bounds.top + bounds.height() * 0.45f
+        val glyphs = PixelFont.valueDigitSets.getValue(PixelFont.DigitStyle.CURRENT)
+        val glucosePitch = minOf(bounds.width(), bounds.height()) * GLUCOSE_PITCH_RATIO
+        val glucoseY = bounds.top + bounds.height() * GLUCOSE_TOP_RATIO
+
+        val trendGlyph = snapshot.trend
+            ?.takeIf { snapshot.staleness != Staleness.DEAD }
+            ?.let { PixelFont.arrowSets.getValue(PixelFont.ArrowStyle.CURRENT).getValue(it) }
+        val trendPitch = glucosePitch * TREND_PITCH_RATIO
+
+        // Value and arrow are centred as one block: centring the value alone would put the arrow
+        // on top of the digits, since it hangs off the value's right edge.
+        val valueWidth = DotGrid.measureText(glucoseText, glyphs, glucosePitch)
+        val trendWidth = if (trendGlyph == null) 0f else glucosePitch + PixelFont.ARROW_WIDTH * trendPitch
+        val glucoseX = bounds.exactCenterX() - (valueWidth + trendWidth) / 2f
 
         DotGrid.drawText(
             canvas = canvas,
             text = glucoseText,
-            glyphs = PixelFont.valueDigitSets.getValue(PixelFont.DigitStyle.CURRENT),
+            glyphs = glyphs,
             x = glucoseX,
             y = glucoseY,
             pitch = glucosePitch,
@@ -119,12 +138,17 @@ class DotMatrixRenderer(
             unlitPaint = unlitPaint,
         )
 
-        if (snapshot.trend != null && snapshot.staleness != Staleness.DEAD) {
-            val trendGlyph = PixelFont.arrowSets.getValue(PixelFont.ArrowStyle.CURRENT).getValue(snapshot.trend)
-            val trendPitch = glucosePitch * 0.8f
-            val trendX = bounds.exactCenterX() + glucosePitch
-            val trendY = glucoseY - glucosePitch
-            DotGrid.drawGlyph(canvas, trendGlyph, trendX, trendY, trendPitch, glucosePaint, unlitPaint)
+        if (trendGlyph != null) {
+            val valueHeight = DotGrid.measureHeight(glyphs, glucosePitch)
+            DotGrid.drawGlyph(
+                canvas = canvas,
+                pattern = trendGlyph,
+                x = glucoseX + valueWidth + glucosePitch,
+                y = glucoseY + (valueHeight - trendGlyph.size * trendPitch) / 2f,
+                pitch = trendPitch,
+                litPaint = glucosePaint,
+                unlitPaint = unlitPaint,
+            )
         }
     }
 
