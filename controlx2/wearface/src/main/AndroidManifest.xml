@@ -67,11 +67,11 @@
         </service>
 
         <!--
-            Diagnostic probe (see DiagnosticWatchFaceService's own doc comment): structurally
-            identical to the two faces above, but the renderer is stock Canvas/Paint with no
-            PixelFont, FaceStateHolder or complications. If this shows up in the picker and the
-            other two don't, the bug is in their renderer/data-layer code, not the manifest or the
-            device. Remove this block together with the class once that's answered.
+            Diagnostic probe, round 3 (see DiagnosticWatchFaceService's own doc comment): rounds 1
+            and 2 both showed up fine (bare renderer, then with the FaceStateHolder read added --
+            that's not the crash). The one remaining manifest difference from the two real faces
+            is wearableConfigurationAction, added here and nowhere else. If this build vanishes
+            from the picker, that's it. Remove this block together with the class once answered.
         -->
         <service
             android:name="it.mattia.controlx2face.diagnostic.DiagnosticWatchFaceService"
@@ -92,6 +92,9 @@
             <meta-data
                 android:name="com.google.android.wearable.watchface.preview_circular"
                 android:resource="@drawable/wf_preview_diagnostic" />
+            <meta-data
+                android:name="com.google.android.wearable.watchface.wearableConfigurationAction"
+                android:value="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
             <meta-data
                 android:name="androidx.wear.watchface.MULTIPLE_INSTANCES_ALLOWED"
                 android:value="true" />
