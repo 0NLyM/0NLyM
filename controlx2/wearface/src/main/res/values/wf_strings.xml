@@ -3,5 +3,4 @@
 <resources>
     <string name="wf_dot_matrix_name">ControlX2 Dot Matrix</string>
     <string name="wf_minimal_grid_name">ControlX2 Minimal Grid</string>
-    <string name="wf_diagnostic_name">ControlX2 Diagnostic</string>
 </resources>

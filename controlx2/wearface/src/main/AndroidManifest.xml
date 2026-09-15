@@ -27,13 +27,14 @@
                 android:name="com.google.android.wearable.watchface.preview_circular"
                 android:resource="@drawable/wf_preview_dot_matrix" />
             <!--
-                Makes the system-supplied editor appear on Wear OS 3+, which renders the
-                UserStyleSchema and every complication slot without us shipping an editor
-                Activity of our own.
+                No wearableConfigurationAction: a three-round diagnostic isolation (each round
+                differed from the working build by exactly one element) confirmed it, and only
+                it, makes the picker on this device drop the face from its list entirely. With
+                it declared, the face was undiscoverable everywhere (on-watch picker, companion
+                app), even though the manifest, previews and renderer were otherwise byte-correct.
+                Costs the system-supplied style/complication editor; there is no known workaround
+                that keeps it. Do not re-add without re-verifying on real hardware first.
             -->
-            <meta-data
-                android:name="com.google.android.wearable.watchface.wearableConfigurationAction"
-                android:value="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
             <meta-data
                 android:name="androidx.wear.watchface.MULTIPLE_INSTANCES_ALLOWED"
                 android:value="true" />
@@ -58,43 +59,13 @@
             <meta-data
                 android:name="com.google.android.wearable.watchface.preview_circular"
                 android:resource="@drawable/wf_preview_minimal_grid" />
-            <meta-data
-                android:name="com.google.android.wearable.watchface.wearableConfigurationAction"
-                android:value="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
-            <meta-data
-                android:name="androidx.wear.watchface.MULTIPLE_INSTANCES_ALLOWED"
-                android:value="true" />
-        </service>
-
-        <!--
-            Diagnostic probe, round 3 (see DiagnosticWatchFaceService's own doc comment): rounds 1
-            and 2 both showed up fine (bare renderer, then with the FaceStateHolder read added;
-            that's not the crash). The one remaining manifest difference from the two real faces
-            is wearableConfigurationAction, added here and nowhere else. If this build vanishes
-            from the picker, that's it. Remove this block together with the class once answered.
-        -->
-        <service
-            android:name="it.mattia.controlx2face.diagnostic.DiagnosticWatchFaceService"
-            android:exported="true"
-            android:label="@string/wf_diagnostic_name"
-            android:permission="android.permission.BIND_WALLPAPER">
-            <intent-filter>
-                <action android:name="android.service.wallpaper.WallpaperService" />
-                <category android:name="com.google.android.wearable.watchface.category.WATCH_FACE" />
-            </intent-filter>
-
-            <meta-data
-                android:name="android.service.wallpaper"
-                android:resource="@xml/wf_watch_face" />
-            <meta-data
-                android:name="com.google.android.wearable.watchface.preview"
-                android:resource="@drawable/wf_preview_diagnostic" />
-            <meta-data
-                android:name="com.google.android.wearable.watchface.preview_circular"
-                android:resource="@drawable/wf_preview_diagnostic" />
-            <meta-data
-                android:name="com.google.android.wearable.watchface.wearableConfigurationAction"
-                android:value="androidx.wear.watchface.editor.action.WATCH_FACE_EDITOR" />
+            <!--
+                No wearableConfigurationAction here either; see the comment on Dot Matrix's
+                service above. This one costs more here specifically: the three data cells were
+                meant to be reassignable through the system editor, and without it they're fixed
+                to ComplicationDefaults' choices (CGM / IOB / battery). Still strictly better than
+                not appearing in the picker at all.
+            -->
             <meta-data
                 android:name="androidx.wear.watchface.MULTIPLE_INSTANCES_ALLOWED"
                 android:value="true" />
