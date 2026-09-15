@@ -29,9 +29,21 @@ jobs:
       # rebuilds both, since that's the code the phone/watch Data Layer messages are serialized
       # with -- unlike a build-number label, a real schema drift between the two IS a failure
       # mode, so shared-module changes keep them paired.
+      #
+      # base is explicit rather than left to paths-filter's own push-event default: without it,
+      # this action fell back to a three-dot diff against origin/main (this repo's default
+      # branch), and controlx2-glyph -- a long-lived branch that's never merged back into main --
+      # has effectively every file in the tree added relative to main. Every filter matched
+      # "true" on every push, silently defeating the whole point of this job (confirmed in build
+      # runs #29 and #31, both of which rebuilt and re-released both APKs for a change that only
+      # touched one). github.event.before is the single commit immediately preceding this push.
       - uses: dorny/paths-filter@v3
         id: filter
+        # workflow_dispatch has no event.before; skip rather than pass an empty base. The decide
+        # step below never reads these outputs for a manual run anyway (it always builds both).
+        if: github.event_name == 'push'
         with:
+          base: ${{ github.event.before }}
           filters: |
             shared:
               - 'controlx2/shared/**'
