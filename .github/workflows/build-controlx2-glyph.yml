@@ -7,7 +7,70 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mobile: ${{ steps.decide.outputs.mobile }}
+      wear: ${{ steps.decide.outputs.wear }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Splits the build so an unrelated app doesn't get rebuilt (and re-released, forcing a
+      # reinstall) just because the other one changed. A push touching only :wear/:wearface
+      # produces a release with only the watch APK, and vice versa. Anything either app actually
+      # depends on (:shared, :pumpcomm, :clientcomm, :db, :pixelfont, or the root build files)
+      # rebuilds both, since that's the code the phone/watch Data Layer messages are serialized
+      # with -- unlike a build-number label, a real schema drift between the two IS a failure
+      # mode, so shared-module changes keep them paired.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'controlx2/shared/**'
+              - 'controlx2/pumpcomm/**'
+              - 'controlx2/clientcomm/**'
+              - 'controlx2/db/**'
+              - 'controlx2/pixelfont/**'
+              - 'controlx2/build.gradle'
+              - 'controlx2/settings.gradle'
+              - 'controlx2/gradle.properties'
+              - '.github/workflows/build-controlx2-glyph.yml'
+            mobile_only:
+              - 'controlx2/mobile/**'
+              - 'controlx2/glyph/**'
+            wear_only:
+              - 'controlx2/wear/**'
+              - 'controlx2/wearface/**'
+
+      - name: Decide which apps to build
+        id: decide
+        run: |
+          # workflow_dispatch has no "before" commit for paths-filter to diff against, so a
+          # manual run always builds both rather than relying on its (undefined) filter output.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+            echo "wear=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          shared="${{ steps.filter.outputs.shared }}"
+          mobile_only="${{ steps.filter.outputs.mobile_only }}"
+          wear_only="${{ steps.filter.outputs.wear_only }}"
+          if [[ "$shared" == "true" || "$mobile_only" == "true" ]]; then
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mobile=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$shared" == "true" || "$wear_only" == "true" ]]; then
+            echo "wear=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "wear=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.wear == 'true'
     runs-on: ubuntu-latest
     # Two APKs (phone + watch) plus the shared library modules; 30 was tight for one.
     timeout-minutes: 45
@@ -42,21 +105,25 @@ jobs:
       # mobile/build.gradle's signingConfigs.release defaults; no GitHub Secrets needed.
       # glyphBuildNumber feeds into controlx2_version (root build.gradle) so the version
       # string shown in the app's own Settings screen carries this same run number.
-      # Fails in seconds rather than minutes when a shared module is broken, with an error that
-      # points at the module instead of at whichever app happened to compile it first.
-      - name: Build shared library modules
-        run: ./gradlew :pixelfont:assembleRelease :wearface:assembleRelease --stacktrace -PglyphBuildNumber=${{ github.run_number }}
+
+      - name: Build shared modules for the phone app
+        if: needs.changes.outputs.mobile == 'true'
+        run: ./gradlew :pixelfont:assembleRelease --stacktrace -PglyphBuildNumber=${{ github.run_number }}
 
       - name: Build release APK
+        if: needs.changes.outputs.mobile == 'true'
         run: ./gradlew :mobile:assembleRelease --stacktrace -PglyphBuildNumber=${{ github.run_number }}
 
-      # The watch app is a separate APK but deliberately shares this release and this build
-      # number: phone and watch talk over the Data Layer and a mismatched pair is a real failure
-      # mode, so they should never be installable at independently drifting versions.
+      - name: Build shared modules for the watch app
+        if: needs.changes.outputs.wear == 'true'
+        run: ./gradlew :pixelfont:assembleRelease :wearface:assembleRelease --stacktrace -PglyphBuildNumber=${{ github.run_number }}
+
       - name: Build wear release APK
+        if: needs.changes.outputs.wear == 'true'
         run: ./gradlew :wear:assembleRelease --stacktrace -PglyphBuildNumber=${{ github.run_number }}
 
       - name: Upload APK artifact
+        if: needs.changes.outputs.mobile == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: controlx2-glyph-debug-apk
@@ -64,37 +131,63 @@ jobs:
           if-no-files-found: error
 
       # Actions artifacts need a GitHub login and come back as a zip -- awkward from a
-      # phone. A Release asset downloads directly (no login, no unzipping).
-      - name: Rename APK for release
+      # phone. A Release asset downloads directly (no login, no unzipping). Only the
+      # app(s) actually rebuilt this run are copied here, so the release below only ever
+      # attaches what changed.
+      - name: Rename phone APK for release
+        if: needs.changes.outputs.mobile == 'true'
         working-directory: . # override the job's controlx2/ default: both paths below are repo-root-relative
-        run: |
-          cp controlx2/mobile/build/outputs/apk/release/mobile-release.apk controlx2-glyph-debug.apk
-          cp controlx2/wear/build/outputs/apk/release/wear-release.apk controlx2-glyph-wear.apk
+        run: cp controlx2/mobile/build/outputs/apk/release/mobile-release.apk controlx2-glyph-debug.apk
+
+      - name: Rename wear APK for release
+        if: needs.changes.outputs.wear == 'true'
+        working-directory: .
+        run: cp controlx2/wear/build/outputs/apk/release/wear-release.apk controlx2-glyph-wear.apk
 
       # Each push gets its own tagged release (build number in both the tag and the title,
       # matching the "-glyph.N" suffix the app's Settings screen shows) instead of overwriting
       # one fixed tag -- so old builds stay in the release history and you can always tell which
-      # one you're looking at. make_latest keeps this one flagged as the repo's current release,
-      # and since the asset filename never changes, the permanent GitHub URL
-      # .../releases/latest/download/controlx2-glyph-debug.apk always resolves to whichever
-      # build is newest without needing to be updated here.
+      # one you're looking at.
+      #
+      # "latest" is a property of a release, not of an individual asset: if a wear-only release
+      # became "latest", .../releases/latest/download/controlx2-glyph-debug.apk would 404 even
+      # though an older release still has that file. So only a release carrying both APKs is
+      # marked latest -- a partial (wear-only or mobile-only) release still gets its own
+      # permanent tag/URL, just not the "latest" pointer, which keeps the /latest/download/
+      # convenience links for both filenames reliable.
+      - name: Write release notes
+        working-directory: .
+        run: |
+          {
+            echo "APK non firmati per il Play Store (installazione diretta/sideload)."
+            echo "Build automatica dal branch \`controlx2-glyph\`, commit ${{ github.sha }}."
+            echo "La versione mostrata in Impostazioni nell'app sarà \`1.0.0-20260504-glyph.${{ github.run_number }}\`."
+            echo
+            if [[ "${{ needs.changes.outputs.mobile }}" == "true" ]]; then
+              echo "- \`controlx2-glyph-debug.apk\` — app per il telefono (aggiornata in questa build)."
+            fi
+            if [[ "${{ needs.changes.outputs.wear }}" == "true" ]]; then
+              echo "- \`controlx2-glyph-wear.apk\` — app per l'orologio Wear OS, da installare con"
+              echo "  \`adb install -r controlx2-glyph-wear.apk\` via debug Wi-Fi (aggiornata in questa build)."
+            fi
+            if [[ "${{ needs.changes.outputs.mobile }}" == "true" && "${{ needs.changes.outputs.wear }}" == "true" ]]; then
+              echo
+              echo "Telefono e orologio sono allineati sullo stesso numero di build in questa release."
+            else
+              echo
+              echo "Solo l'app sopra è cambiata in questo push; l'altra non è stata ricompilata e resta"
+              echo "alla sua ultima release — non serve reinstallarla."
+            fi
+          } > release_notes.md
+
       - name: Publish versioned release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: controlx2-glyph-v${{ github.run_number }}
           name: "ControlX2 Glyph build #${{ github.run_number }}"
-          body: |
-            APK non firmati per il Play Store (installazione diretta/sideload).
-            Build automatica dal branch `controlx2-glyph`, commit ${{ github.sha }}.
-            La versione mostrata in Impostazioni nell'app sarà `1.0.0-20260504-glyph.${{ github.run_number }}`.
-
-            - `controlx2-glyph-debug.apk` — app per il telefono.
-            - `controlx2-glyph-wear.apk` — app per l'orologio Wear OS, da installare con
-              `adb install -r controlx2-glyph-wear.apk` via debug Wi-Fi. Va tenuta allo stesso
-              numero di build dell'app telefono: le due comunicano fra loro e una coppia
-              disallineata può non parlarsi.
+          body_path: release_notes.md
           prerelease: false
-          make_latest: true
+          make_latest: ${{ needs.changes.outputs.mobile == 'true' && needs.changes.outputs.wear == 'true' }}
           files: |
             controlx2-glyph-debug.apk
             controlx2-glyph-wear.apk
