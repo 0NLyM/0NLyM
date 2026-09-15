@@ -13,7 +13,14 @@ jobs:
       mobile: ${{ steps.decide.outputs.mobile }}
       wear: ${{ steps.decide.outputs.wear }}
     steps:
+      # paths-filter needs the push's "before" commit present locally to diff against; the
+      # default shallow (depth-1) checkout only has HEAD, so with nothing to compare it falls
+      # back to treating every tracked file as newly added -- every filter matches "true" and
+      # this whole job silently stops filtering anything. Full history avoids that regardless of
+      # how many commits a push contains.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Splits the build so an unrelated app doesn't get rebuilt (and re-released, forcing a
       # reinstall) just because the other one changed. A push touching only :wear/:wearface
