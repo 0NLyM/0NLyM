@@ -68,7 +68,7 @@
 
         <!--
             Diagnostic probe, round 3 (see DiagnosticWatchFaceService's own doc comment): rounds 1
-            and 2 both showed up fine (bare renderer, then with the FaceStateHolder read added --
+            and 2 both showed up fine (bare renderer, then with the FaceStateHolder read added;
             that's not the crash). The one remaining manifest difference from the two real faces
             is wearableConfigurationAction, added here and nowhere else. If this build vanishes
             from the picker, that's it. Remove this block together with the class once answered.
