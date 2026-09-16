@@ -8,7 +8,6 @@ import android.graphics.RectF
 import android.os.BatteryManager
 import android.view.SurfaceHolder
 import androidx.core.content.res.ResourcesCompat
-import androidx.wear.watchface.ComplicationSlotsManager
 import androidx.wear.watchface.DrawMode
 import androidx.wear.watchface.Renderer
 import androidx.wear.watchface.WatchState
@@ -44,14 +43,15 @@ private const val DATE_LETTER_SPACING_EM = 0.18f
 private const val CLOCK_PITCH_RATIO = 0.032f
 
 /** Clock top edge, as a fraction of display height. */
-private const val CLOCK_TOP_RATIO = 0.25f
+private const val CLOCK_TOP_RATIO = 0.26f
 
 /** Cell pitch for the tappable value (Stile 3/ORIGINAL, 5x7) -- smaller than the clock so the
  *  two read as headline/detail rather than as two clocks. */
 private const val VALUE_PITCH_RATIO = 0.017f
 
-/** Top edge of the value glyph block, as a fraction of display height. */
-private const val VALUE_TOP_RATIO = 0.51f
+/** Top edge of the value glyph block, as a fraction of display height -- kept a clear gap below
+ *  the clock rather than the two reading as one crowded block. */
+private const val VALUE_TOP_RATIO = 0.55f
 
 /** Trend/icon glyph pitch, relative to the value's, so the mark reads as the smaller one. */
 private const val TREND_PITCH_RATIO = 0.8f
@@ -64,10 +64,13 @@ private const val TREND_GAP_RATIO = 2.2f
  *  itself is a precise but uncomfortably small target to hit on a wrist. */
 private const val VALUE_TAP_PADDING_RATIO = 0.8f
 
-/** Hairline rule above the status row, spanning this fraction of the display's width, centred. */
+/** Hairline rule above the status row: two segments (not one unbroken line), split around the
+ *  value widget's own centre column and hung a fixed gap below its actual bottom edge -- so the
+ *  rule tracks the value block instead of sitting at an independent fixed height. */
 private const val RULE_LEFT_RATIO = 0.16f
 private const val RULE_RIGHT_RATIO = 0.84f
-private const val RULE_Y_RATIO = 0.685f
+private const val RULE_GAP_HALF_WIDTH_RATIO = 0.04f
+private const val RULE_GAP_BELOW_VALUE_RATIO = 0.045f
 private const val RULE_THICKNESS_RATIO = 0.0022f
 
 /** Status row: watch battery | phone battery | weather, each an icon+label pair (or, for
@@ -87,7 +90,6 @@ class DotMatrixRenderer(
     private val watchState: WatchState,
     canvasType: Int,
     private val context: Context,
-    private val complicationSlotsManager: ComplicationSlotsManager,
 ) : Renderer.CanvasRenderer2<DotMatrixRenderer.Assets>(
     surfaceHolder,
     currentUserStyleRepository,
@@ -137,6 +139,11 @@ class DotMatrixRenderer(
      *  taps are not delivered anyway. */
     private var valueTapRect: RectF? = null
 
+    /** Bottom edge of the value glyph block, set each interactive frame by [drawValue] and read by
+     *  [drawStatusRow] so the rule above the status row tracks the value widget's actual position
+     *  instead of sitting at an independent fixed height. */
+    private var valueBottomY: Float = 0f
+
     /** Cycles the tappable value to the next metric if ([xPos], [yPos]) falls inside its current
      *  hit area. Returns whether it actually changed, so the caller only invalidates when it did. */
     fun handleValueTap(xPos: Int, yPos: Int): Boolean {
@@ -171,7 +178,7 @@ class DotMatrixRenderer(
             drawValue(canvas, bounds, snapshot, thresholds)
             // Kept out of ambient with everything else in the status row: an always-on region
             // this size is both a burn-in pattern and wasted power on the low-refresh AOD path.
-            drawStatusRow(canvas, bounds, zonedDateTime)
+            drawStatusRow(canvas, bounds)
         }
     }
 
@@ -266,6 +273,7 @@ class DotMatrixRenderer(
             bounds.right.toFloat(),
             y + valueHeight + padding,
         )
+        valueBottomY = y + valueHeight
     }
 
     /** The text to draw for [displayMetric], and whether it's below/out of its configured
@@ -299,12 +307,24 @@ class DotMatrixRenderer(
         }
     }
 
-    private fun drawStatusRow(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
+    private fun drawStatusRow(canvas: Canvas, bounds: Rect) {
         val shortSide = minOf(bounds.width(), bounds.height()).toFloat()
         val hairline = maxOf(1f, shortSide * RULE_THICKNESS_RATIO)
-        val ruleY = bounds.top + bounds.height() * RULE_Y_RATIO
+
+        // Split in two around the value widget's own centre column, and hung a fixed gap below
+        // its actual bottom edge rather than at an independent fixed height.
+        val ruleY = valueBottomY + shortSide * RULE_GAP_BELOW_VALUE_RATIO
+        val centreX = bounds.exactCenterX()
+        val gapHalfWidth = shortSide * RULE_GAP_HALF_WIDTH_RATIO
         canvas.drawRect(
             bounds.left + bounds.width() * RULE_LEFT_RATIO,
+            ruleY,
+            centreX - gapHalfWidth,
+            ruleY + hairline,
+            rulePaint,
+        )
+        canvas.drawRect(
+            centreX + gapHalfWidth,
             ruleY,
             bounds.left + bounds.width() * RULE_RIGHT_RATIO,
             ruleY + hairline,
@@ -347,10 +367,25 @@ class DotMatrixRenderer(
             drawPhoneIcon(canvas, iconX, rowTop - iconHeight * 0.05f, iconWidth, iconHeight * 1.1f)
         }
 
-        // Weather: a real system complication, not our dot font -- there is no dot-matrix weather
-        // data source, and this is the one cell that isn't hand-drawn. It renders itself within
-        // the bounds given to its slot in DotMatrixWatchFaceService.createComplicationSlotsManager.
-        complicationSlotsManager[WEATHER_COMPLICATION_SLOT_ID]?.render(canvas, zonedDateTime, renderParameters)
+        // Weather: a plain sun icon, no live temperature -- "-°" reads the same as the other
+        // two cells' "-" for a value that isn't available. The androidx.wear.watchface
+        // complications API has no system weather data source to bind to (that only exists as a
+        // [WEATHER.*] expression in the newer declarative Watch Face Format, which this
+        // programmatic face doesn't use) and there's no configuration editor for the wearer to
+        // pick a third-party weather provider either. A live reading needs a real weather API
+        // integration, which is its own separate task.
+        val weatherIconWidth = iconHeight
+        drawStatusCell(
+            canvas = canvas,
+            columnCentre = bounds.left + bounds.width() * STATUS_COLUMN_CENTRE_RATIOS[2],
+            rowTop = rowTop,
+            iconHeight = iconHeight,
+            gap = gap,
+            iconWidth = weatherIconWidth,
+            label = "-°",
+        ) { iconX, iconWidth ->
+            drawWeatherIcon(canvas, iconX + iconWidth / 2f, rowTop + iconHeight / 2f, iconWidth * 0.55f)
+        }
 
         for (xRatio in STATUS_DIVIDER_X_RATIOS) {
             val x = bounds.left + bounds.width() * xRatio
@@ -409,9 +444,25 @@ class DotMatrixRenderer(
         canvas.drawLine(x + w * 0.32f, lineY, x + w * 0.68f, lineY, statusStrokePaint)
     }
 
+    /** Minimal line sun glyph: a circle plus eight short rays -- decorative only (see the call
+     *  site for why there's no live temperature reading behind it yet). */
+    private fun drawWeatherIcon(canvas: Canvas, cx: Float, cy: Float, r: Float) {
+        canvas.drawCircle(cx, cy, r * 0.55f, statusStrokePaint)
+        for (i in 0 until 8) {
+            val angle = i * (Math.PI / 4.0)
+            val cos = Math.cos(angle).toFloat()
+            val sin = Math.sin(angle).toFloat()
+            canvas.drawLine(
+                cx + cos * r * 0.72f, cy + sin * r * 0.72f,
+                cx + cos * r, cy + sin * r,
+                statusStrokePaint,
+            )
+        }
+    }
+
     override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: Assets) {
-        // Weather is the only complication slot, and it isn't user-reassignable (see
-        // DotMatrixWatchFaceService for why), so there is nothing useful to highlight in an editor.
+        // No complication slots on this face -- see drawWeatherIcon's call site for why weather is
+        // a plain drawn icon instead of one.
         canvas.drawColor(android.graphics.Color.TRANSPARENT)
     }
 }
