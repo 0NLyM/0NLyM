@@ -22,7 +22,8 @@ object PixelFont {
         CURRENT("Stile 1"),
         LEGACY("Stile 2"),
         ORIGINAL("Stile 3"),
-        STYLE4("Stile 4")
+        STYLE4("Stile 4"),
+        STYLE5("Stile 5")
     }
 
     enum class ArrowStyle(val label: String) {
@@ -294,9 +295,34 @@ object PixelFont {
                 '9' to listOf("0110", "1001", "0111", "0001", "0110")
             ),
             width = 4
+        ),
+        // Stile 5: the blocky 5x7 "digital dot matrix" family transcribed from the designer's
+        // reference photos of a big LED-style clock -- same shapes as valueDigitSets.ORIGINAL,
+        // added here as its clock counterpart (clock-only, same reason STYLE4 is value-only: the
+        // picker filters to `it in <its own map>`) so the Dot Matrix watch face's clock can use
+        // it large while the glucose value below it uses the existing ORIGINAL entry, smaller.
+        DigitStyle.STYLE5 to GlyphSet(
+            mapOf(
+                '0' to listOf("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
+                '1' to listOf("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+                '2' to listOf("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
+                '3' to listOf("11111", "00010", "00100", "00010", "00001", "10001", "01110"),
+                '4' to listOf("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+                '5' to listOf("11111", "10000", "11110", "00001", "00001", "10001", "01110"),
+                '6' to listOf("00110", "01000", "10000", "11110", "10001", "10001", "01110"),
+                '7' to listOf("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+                '8' to listOf("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+                '9' to listOf("01110", "10001", "10001", "01111", "00001", "00010", "01100")
+            ),
+            width = 5
         )
     )
 
     val statusColon: List<String> = listOf("0", "1", "0", "1")
     const val STATUS_COLON_WIDTH = 1
+
+    /** A 7-row colon matching STYLE5's height, drawn separately from [statusColon] (4 rows) so it
+     *  lines up with a taller digit; kept here rather than folded into [statusColon] since every
+     *  other style is 4-5 rows tall and would mis-space against a 7-row separator. */
+    val clockSeparator7Row: List<String> = listOf("0", "0", "1", "0", "1", "0", "0")
 }

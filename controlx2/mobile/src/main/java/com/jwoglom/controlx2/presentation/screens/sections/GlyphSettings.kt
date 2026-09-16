@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -26,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -40,9 +44,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.jwoglom.controlx2.presentation.components.HeaderLine
+import it.mattia.controlx2face.FaceThresholdsSync
 import it.mattia.pixelfont.PixelFont
 import it.mattia.glucoseglyph.model.AppSettings
 import it.mattia.glucoseglyph.model.Trend
@@ -79,10 +85,21 @@ fun GlyphSettings(
     var sensorDurationDays by remember { mutableStateOf(settings.sensorDurationDays) }
     var useMmol by remember { mutableStateOf(settings.useMmol) }
 
+    var glucoseLowThreshold by remember { mutableStateOf(settings.glucoseLowThreshold) }
+    var glucoseHighThreshold by remember { mutableStateOf(settings.glucoseHighThreshold) }
+    var batteryThreshold by remember { mutableStateOf(settings.batteryThreshold) }
+    var iobThreshold by remember { mutableStateOf(settings.iobThreshold) }
+    var sensorDaysThreshold by remember { mutableStateOf(settings.sensorDaysThreshold) }
+
     var showArrowDialog by remember { mutableStateOf(false) }
     var showClockDialog by remember { mutableStateOf(false) }
     var showValueDialog by remember { mutableStateOf(false) }
     var showSensorDialog by remember { mutableStateOf(false) }
+    var showGlucoseLowDialog by remember { mutableStateOf(false) }
+    var showGlucoseHighDialog by remember { mutableStateOf(false) }
+    var showBatteryThresholdDialog by remember { mutableStateOf(false) }
+    var showIobThresholdDialog by remember { mutableStateOf(false) }
+    var showSensorDaysThresholdDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = innerPadding,
@@ -167,6 +184,71 @@ fun GlyphSettings(
                 )
                 Divider()
             }
+
+            item {
+                HeaderLine("Quadrante Dot Matrix (orologio)")
+                Divider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Soglia glicemia bassa") },
+                    supportingContent = { Text("Sotto $glucoseLowThreshold mg/dL, valore in rosso") },
+                    leadingContent = {
+                        Icon(Icons.Filled.WaterDrop, contentDescription = "Soglia glicemia bassa icon")
+                    },
+                    modifier = Modifier.clickable { showGlucoseLowDialog = true }
+                )
+                Divider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Soglia glicemia alta") },
+                    supportingContent = { Text("Sopra $glucoseHighThreshold mg/dL, valore in rosso") },
+                    leadingContent = {
+                        Icon(Icons.Filled.WaterDrop, contentDescription = "Soglia glicemia alta icon")
+                    },
+                    modifier = Modifier.clickable { showGlucoseHighDialog = true }
+                )
+                Divider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Soglia batteria microinfusore") },
+                    supportingContent = { Text("Sotto $batteryThreshold%, valore in rosso") },
+                    leadingContent = {
+                        Icon(Icons.Filled.BatteryAlert, contentDescription = "Soglia batteria icon")
+                    },
+                    modifier = Modifier.clickable { showBatteryThresholdDialog = true }
+                )
+                Divider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Soglia unità insulina attiva") },
+                    supportingContent = { Text("Sotto ${"%.1f".format(iobThreshold)}U, valore in rosso") },
+                    leadingContent = {
+                        Icon(Icons.Filled.Opacity, contentDescription = "Soglia insulina icon")
+                    },
+                    modifier = Modifier.clickable { showIobThresholdDialog = true }
+                )
+                Divider()
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Soglia giorni scadenza sensore") },
+                    supportingContent = { Text("Sotto $sensorDaysThreshold giorni, valore in rosso") },
+                    leadingContent = {
+                        Icon(Icons.Filled.Timer, contentDescription = "Soglia scadenza icon")
+                    },
+                    modifier = Modifier.clickable { showSensorDaysThresholdDialog = true }
+                )
+                Divider()
+            }
         }
     )
 
@@ -234,6 +316,114 @@ fun GlyphSettings(
             onDismiss = { showSensorDialog = false }
         )
     }
+
+    // Every threshold edit also pushes the full set to the watch: cheap (one small DataItem) and
+    // avoids ever sending it out of sync with what the phone just saved.
+    if (showGlucoseLowDialog) {
+        NumberEditDialog(
+            title = "Soglia glicemia bassa (mg/dL)",
+            initialValue = glucoseLowThreshold.toString(),
+            onConfirm = { text ->
+                text.toIntOrNull()?.let {
+                    glucoseLowThreshold = it
+                    settings.glucoseLowThreshold = it
+                    FaceThresholdsSync.push(context, settings)
+                }
+            },
+            onDismiss = { showGlucoseLowDialog = false }
+        )
+    }
+    if (showGlucoseHighDialog) {
+        NumberEditDialog(
+            title = "Soglia glicemia alta (mg/dL)",
+            initialValue = glucoseHighThreshold.toString(),
+            onConfirm = { text ->
+                text.toIntOrNull()?.let {
+                    glucoseHighThreshold = it
+                    settings.glucoseHighThreshold = it
+                    FaceThresholdsSync.push(context, settings)
+                }
+            },
+            onDismiss = { showGlucoseHighDialog = false }
+        )
+    }
+    if (showBatteryThresholdDialog) {
+        NumberEditDialog(
+            title = "Soglia batteria microinfusore (%)",
+            initialValue = batteryThreshold.toString(),
+            onConfirm = { text ->
+                text.toIntOrNull()?.let {
+                    batteryThreshold = it
+                    settings.batteryThreshold = it
+                    FaceThresholdsSync.push(context, settings)
+                }
+            },
+            onDismiss = { showBatteryThresholdDialog = false }
+        )
+    }
+    if (showIobThresholdDialog) {
+        NumberEditDialog(
+            title = "Soglia unità insulina attiva (U)",
+            initialValue = iobThreshold.toString(),
+            keyboardType = KeyboardType.Decimal,
+            onConfirm = { text ->
+                text.toFloatOrNull()?.let {
+                    iobThreshold = it
+                    settings.iobThreshold = it
+                    FaceThresholdsSync.push(context, settings)
+                }
+            },
+            onDismiss = { showIobThresholdDialog = false }
+        )
+    }
+    if (showSensorDaysThresholdDialog) {
+        NumberEditDialog(
+            title = "Soglia giorni scadenza sensore",
+            initialValue = sensorDaysThreshold.toString(),
+            onConfirm = { text ->
+                text.toIntOrNull()?.let {
+                    sensorDaysThreshold = it
+                    settings.sensorDaysThreshold = it
+                    FaceThresholdsSync.push(context, settings)
+                }
+            },
+            onDismiss = { showSensorDaysThresholdDialog = false }
+        )
+    }
+}
+
+/** A single numeric field in a dialog, used for the Dot Matrix face's red-accent thresholds --
+ *  arbitrary integers/decimals across too wide a range to offer as a picker list. */
+@Composable
+private fun NumberEditDialog(
+    title: String,
+    initialValue: String,
+    keyboardType: KeyboardType = KeyboardType.Number,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(initialValue) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(text)
+                onDismiss()
+            }) { Text("Salva") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annulla") }
+        }
+    )
 }
 
 /** Renders a PixelFont pattern (list of "0110…" row strings) as a small lit-pixel grid,

@@ -74,9 +74,15 @@
         <service
             android:name="it.mattia.controlx2face.data.FaceMessageListenerService"
             android:exported="true">
+            <!--
+                BIND_LISTENER (rather than separate MESSAGE_RECEIVED/DATA_CHANGED filters with
+                per-path <data> elements) delivers every Data Layer event system-wide to this
+                service; the service itself filters by path in onMessageReceived/onDataChanged.
+                Switched from a MESSAGE_RECEIVED-only filter when onDataChanged (the threshold
+                settings sync) was added, so one declaration covers both callbacks.
+            -->
             <intent-filter>
-                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-                <data android:pathPrefix="/from-pump/receive-message" />
+                <action android:name="com.google.android.gms.wearable.BIND_LISTENER" />
             </intent-filter>
         </service>
     </application>

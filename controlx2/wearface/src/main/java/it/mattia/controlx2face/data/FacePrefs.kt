@@ -64,4 +64,23 @@ class FacePrefs(context: Context) {
             apply()
         }
     }
+
+    fun getThresholds(): FaceThresholds = FaceThresholds(
+        glucoseLow = prefs.getInt("threshold_glucose_low", FaceThresholds.DEFAULT.glucoseLow),
+        glucoseHigh = prefs.getInt("threshold_glucose_high", FaceThresholds.DEFAULT.glucoseHigh),
+        batteryPercent = prefs.getInt("threshold_battery_percent", FaceThresholds.DEFAULT.batteryPercent),
+        iobUnits = prefs.getFloat("threshold_iob_units", FaceThresholds.DEFAULT.iobUnits),
+        sensorDays = prefs.getInt("threshold_sensor_days", FaceThresholds.DEFAULT.sensorDays),
+    )
+
+    fun setThresholds(thresholds: FaceThresholds) {
+        prefs.edit().apply {
+            putInt("threshold_glucose_low", thresholds.glucoseLow)
+            putInt("threshold_glucose_high", thresholds.glucoseHigh)
+            putInt("threshold_battery_percent", thresholds.batteryPercent)
+            putFloat("threshold_iob_units", thresholds.iobUnits)
+            putInt("threshold_sensor_days", thresholds.sensorDays)
+            apply()
+        }
+    }
 }

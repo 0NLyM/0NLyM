@@ -22,15 +22,14 @@ data class FaceSnapshot(
             }
         }
 
-    val range: GlucoseRange
-        get() {
-            val mg = glucoseMgdl ?: return GlucoseRange.UNKNOWN
-            return when {
-                mg < 70 -> GlucoseRange.LOW
-                mg > 180 -> GlucoseRange.HIGH
-                else -> GlucoseRange.IN_RANGE
-            }
+    fun range(thresholds: FaceThresholds): GlucoseRange {
+        val mg = glucoseMgdl ?: return GlucoseRange.UNKNOWN
+        return when {
+            mg < thresholds.glucoseLow -> GlucoseRange.LOW
+            mg > thresholds.glucoseHigh -> GlucoseRange.HIGH
+            else -> GlucoseRange.IN_RANGE
         }
+    }
 }
 
 enum class Staleness {
