@@ -64,13 +64,10 @@ private const val TREND_GAP_RATIO = 2.2f
  *  itself is a precise but uncomfortably small target to hit on a wrist. */
 private const val VALUE_TAP_PADDING_RATIO = 0.8f
 
-/** Hairline rule above the status row: two segments (not one unbroken line), split around the
- *  value widget's own centre column and hung a fixed gap below its actual bottom edge -- so the
- *  rule tracks the value block instead of sitting at an independent fixed height. */
-private const val RULE_LEFT_RATIO = 0.16f
-private const val RULE_RIGHT_RATIO = 0.84f
-private const val RULE_GAP_HALF_WIDTH_RATIO = 0.04f
-private const val RULE_GAP_BELOW_VALUE_RATIO = 0.045f
+/** A single hairline dash to the left of the value block, vertically centred on it (aligned with
+ *  the glucose widget's own Y axis, not hung below the whole row). */
+private const val VALUE_RULE_LEFT_RATIO = 0.16f
+private const val VALUE_RULE_GAP_PITCHES = 2f
 private const val RULE_THICKNESS_RATIO = 0.0022f
 
 /** Status row: watch battery | phone battery | weather, each an icon+label pair (or, for
@@ -138,11 +135,6 @@ class DotMatrixRenderer(
      *  (and so its centred position) depends on the text currently shown. Null in ambient, where
      *  taps are not delivered anyway. */
     private var valueTapRect: RectF? = null
-
-    /** Bottom edge of the value glyph block, set each interactive frame by [drawValue] and read by
-     *  [drawStatusRow] so the rule above the status row tracks the value widget's actual position
-     *  instead of sitting at an independent fixed height. */
-    private var valueBottomY: Float = 0f
 
     /** Cycles the tappable value to the next metric if ([xPos], [yPos]) falls inside its current
      *  hit area. Returns whether it actually changed, so the caller only invalidates when it did. */
@@ -221,6 +213,7 @@ class DotMatrixRenderer(
 
         val (text, belowThreshold) = valueTextAndAlert(snapshot, thresholds)
         val valuePaint = if (belowThreshold) accentPaint else litPaint
+        val shortSide = minOf(bounds.width(), bounds.height()).toFloat()
 
         // Glucose gets its trend arrow; the other three get a small fixed icon in the same slot
         // (the same battery/reservoir/sensor-days marks the phone's Glyph Toy already uses for
@@ -273,7 +266,16 @@ class DotMatrixRenderer(
             bounds.right.toFloat(),
             y + valueHeight + padding,
         )
-        valueBottomY = y + valueHeight
+
+        // A single hairline dash to the left of the value, vertically centred on it -- aligned
+        // with the widget's own Y axis rather than hung below the whole row.
+        val dashY = y + valueHeight / 2f
+        val hairline = maxOf(1f, shortSide * RULE_THICKNESS_RATIO)
+        val dashLeft = bounds.left + bounds.width() * VALUE_RULE_LEFT_RATIO
+        val dashRight = x - pitch * VALUE_RULE_GAP_PITCHES
+        if (dashRight > dashLeft) {
+            canvas.drawRect(dashLeft, dashY - hairline / 2f, dashRight, dashY + hairline / 2f, rulePaint)
+        }
     }
 
     /** The text to draw for [displayMetric], and whether it's below/out of its configured
@@ -310,26 +312,6 @@ class DotMatrixRenderer(
     private fun drawStatusRow(canvas: Canvas, bounds: Rect) {
         val shortSide = minOf(bounds.width(), bounds.height()).toFloat()
         val hairline = maxOf(1f, shortSide * RULE_THICKNESS_RATIO)
-
-        // Split in two around the value widget's own centre column, and hung a fixed gap below
-        // its actual bottom edge rather than at an independent fixed height.
-        val ruleY = valueBottomY + shortSide * RULE_GAP_BELOW_VALUE_RATIO
-        val centreX = bounds.exactCenterX()
-        val gapHalfWidth = shortSide * RULE_GAP_HALF_WIDTH_RATIO
-        canvas.drawRect(
-            bounds.left + bounds.width() * RULE_LEFT_RATIO,
-            ruleY,
-            centreX - gapHalfWidth,
-            ruleY + hairline,
-            rulePaint,
-        )
-        canvas.drawRect(
-            centreX + gapHalfWidth,
-            ruleY,
-            bounds.left + bounds.width() * RULE_RIGHT_RATIO,
-            ruleY + hairline,
-            rulePaint,
-        )
 
         val rowTop = bounds.top + bounds.height() * STATUS_ROW_TOP_RATIO
         val iconHeight = shortSide * STATUS_ICON_HEIGHT_RATIO
