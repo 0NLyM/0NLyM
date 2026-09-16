@@ -95,6 +95,11 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: write
+    env:
+      # Same string controlx2/build.gradle computes for controlx2_version (and so
+      # versionName on both APKs) from this same glyphBuildNumber -- computed once here so
+      # the release filenames, the release notes and the build args never drift apart.
+      APP_VERSION: 1.0.0-20260504-glyph.${{ github.run_number }}
     defaults:
       run:
         working-directory: controlx2
@@ -153,15 +158,20 @@ jobs:
       # phone. A Release asset downloads directly (no login, no unzipping). Only the
       # app(s) actually rebuilt this run are copied here, so the release below only ever
       # attaches what changed.
+      #
+      # The filename carries APP_VERSION (same string as the APK's own versionName) from this
+      # build onward, so two APKs downloaded weeks apart are distinguishable without opening
+      # the app -- at the cost of the old fixed-name .../releases/latest/download/ convenience
+      # link, which only worked because the filename never changed between builds.
       - name: Rename phone APK for release
         if: needs.changes.outputs.mobile == 'true'
         working-directory: . # override the job's controlx2/ default: both paths below are repo-root-relative
-        run: cp controlx2/mobile/build/outputs/apk/release/mobile-release.apk controlx2-glyph-debug.apk
+        run: cp controlx2/mobile/build/outputs/apk/release/mobile-release.apk "controlx2-glyph-debug-${{ env.APP_VERSION }}.apk"
 
       - name: Rename wear APK for release
         if: needs.changes.outputs.wear == 'true'
         working-directory: .
-        run: cp controlx2/wear/build/outputs/apk/release/wear-release.apk controlx2-glyph-wear.apk
+        run: cp controlx2/wear/build/outputs/apk/release/wear-release.apk "controlx2-glyph-wear-${{ env.APP_VERSION }}.apk"
 
       # Each push gets its own tagged release (build number in both the tag and the title,
       # matching the "-glyph.N" suffix the app's Settings screen shows) instead of overwriting
@@ -169,25 +179,25 @@ jobs:
       # one you're looking at.
       #
       # "latest" is a property of a release, not of an individual asset: if a wear-only release
-      # became "latest", .../releases/latest/download/controlx2-glyph-debug.apk would 404 even
-      # though an older release still has that file. So only a release carrying both APKs is
-      # marked latest -- a partial (wear-only or mobile-only) release still gets its own
-      # permanent tag/URL, just not the "latest" pointer, which keeps the /latest/download/
-      # convenience links for both filenames reliable.
+      # became "latest", anyone opening .../releases/latest would find no phone APK there even
+      # though an older release still has one. So only a release carrying both APKs is marked
+      # latest -- a partial (wear-only or mobile-only) release still gets its own permanent
+      # tag/URL, just not the "latest" pointer. (Filenames now carry APP_VERSION, so there's no
+      # fixed-name /latest/download/ convenience link to preserve here either way.)
       - name: Write release notes
         working-directory: .
         run: |
           {
             echo "APK non firmati per il Play Store (installazione diretta/sideload)."
             echo "Build automatica dal branch \`controlx2-glyph\`, commit ${{ github.sha }}."
-            echo "La versione mostrata in Impostazioni nell'app sarà \`1.0.0-20260504-glyph.${{ github.run_number }}\`."
+            echo "La versione mostrata in Impostazioni nell'app sarà \`${{ env.APP_VERSION }}\`."
             echo
             if [[ "${{ needs.changes.outputs.mobile }}" == "true" ]]; then
-              echo "- \`controlx2-glyph-debug.apk\` — app per il telefono (aggiornata in questa build)."
+              echo "- \`controlx2-glyph-debug-${{ env.APP_VERSION }}.apk\` — app per il telefono (aggiornata in questa build)."
             fi
             if [[ "${{ needs.changes.outputs.wear }}" == "true" ]]; then
-              echo "- \`controlx2-glyph-wear.apk\` — app per l'orologio Wear OS, da installare con"
-              echo "  \`adb install -r controlx2-glyph-wear.apk\` via debug Wi-Fi (aggiornata in questa build)."
+              echo "- \`controlx2-glyph-wear-${{ env.APP_VERSION }}.apk\` — app per l'orologio Wear OS, da installare con"
+              echo "  \`adb install -r controlx2-glyph-wear-${{ env.APP_VERSION }}.apk\` via debug Wi-Fi (aggiornata in questa build)."
             fi
             if [[ "${{ needs.changes.outputs.mobile }}" == "true" && "${{ needs.changes.outputs.wear }}" == "true" ]]; then
               echo
@@ -208,5 +218,5 @@ jobs:
           prerelease: false
           make_latest: ${{ needs.changes.outputs.mobile == 'true' && needs.changes.outputs.wear == 'true' }}
           files: |
-            controlx2-glyph-debug.apk
-            controlx2-glyph-wear.apk
+            controlx2-glyph-debug-${{ env.APP_VERSION }}.apk
+            controlx2-glyph-wear-${{ env.APP_VERSION }}.apk

@@ -2,5 +2,4 @@
 <!-- Every name here is wf_-prefixed so nothing collides when merged into :wear's resources. -->
 <resources>
     <string name="wf_dot_matrix_name">ControlX2 Dot Matrix</string>
-    <string name="wf_minimal_grid_name">ControlX2 Minimal Grid</string>
 </resources>
