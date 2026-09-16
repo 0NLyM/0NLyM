@@ -28,27 +28,39 @@ class FaceMessageListenerService : WearableListenerService() {
 
     // The Dot Matrix face has no settings UI of its own (see wearface's AndroidManifest.xml for
     // why the system style editor was dropped), so its red-threshold settings live on the phone
-    // and arrive here as a synced DataItem instead of a runtime message.
+    // and arrive here as a synced DataItem instead of a runtime message. The phone's own battery
+    // level, for the tap-cycled "phone battery" reading, arrives the same way (see
+    // PhoneBatteryReporter in :mobile).
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         try {
             for (event in dataEvents) {
                 if (event.type != DataEvent.TYPE_CHANGED) continue
-                if (event.dataItem.uri.path != THRESHOLDS_PATH) continue
-
                 val map = DataMapItem.fromDataItem(event.dataItem).dataMap
-                val defaults = FaceThresholds.DEFAULT
-                val thresholds = FaceThresholds(
-                    glucoseLow = map.getInt("glucose_low", defaults.glucoseLow),
-                    glucoseHigh = map.getInt("glucose_high", defaults.glucoseHigh),
-                    batteryPercent = map.getInt("battery_percent", defaults.batteryPercent),
-                    iobUnits = map.getFloat("iob_units", defaults.iobUnits),
-                    sensorDays = map.getInt("sensor_days", defaults.sensorDays),
-                )
-                Log.d(TAG, "onDataChanged: thresholds=$thresholds")
-                FacePrefs(this).setThresholds(thresholds)
+
+                when (event.dataItem.uri.path) {
+                    THRESHOLDS_PATH -> {
+                        val defaults = FaceThresholds.DEFAULT
+                        val thresholds = FaceThresholds(
+                            glucoseLow = map.getInt("glucose_low", defaults.glucoseLow),
+                            glucoseHigh = map.getInt("glucose_high", defaults.glucoseHigh),
+                            batteryPercent = map.getInt("battery_percent", defaults.batteryPercent),
+                            iobUnits = map.getFloat("iob_units", defaults.iobUnits),
+                            sensorDays = map.getInt("sensor_days", defaults.sensorDays),
+                        )
+                        Log.d(TAG, "onDataChanged: thresholds=$thresholds")
+                        FacePrefs(this).setThresholds(thresholds)
+                    }
+                    PHONE_BATTERY_PATH -> {
+                        val percent = map.getInt("percent", -1)
+                        if (percent >= 0) {
+                            Log.d(TAG, "onDataChanged: phoneBatteryPercent=$percent")
+                            FacePrefs(this).setPhoneBatteryPercent(percent)
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to process threshold update", e)
+            Log.e(TAG, "Failed to process Data Layer update", e)
         } finally {
             dataEvents.release()
         }
@@ -57,5 +69,6 @@ class FaceMessageListenerService : WearableListenerService() {
     companion object {
         private const val TAG = "FaceMessageListener"
         const val THRESHOLDS_PATH = "/controlx2face/thresholds"
+        const val PHONE_BATTERY_PATH = "/controlx2face/phone-battery"
     }
 }

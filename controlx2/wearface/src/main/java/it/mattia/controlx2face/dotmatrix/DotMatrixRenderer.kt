@@ -5,8 +5,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.BatteryManager
 import android.view.SurfaceHolder
 import androidx.core.content.res.ResourcesCompat
+import androidx.wear.watchface.ComplicationSlotsManager
 import androidx.wear.watchface.DrawMode
 import androidx.wear.watchface.Renderer
 import androidx.wear.watchface.WatchState
@@ -25,6 +27,7 @@ import it.mattia.pixelfont.PixelFont
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Nothing there is sub-minute on this face, so it only needs redrawing once a minute; live data
@@ -34,8 +37,8 @@ private const val FRAME_PERIOD_MS = 60_000L
 
 /** Date line: small tracked-out caps, top edge as a fraction of display height. */
 private const val DATE_TOP_RATIO = 0.19f
-private const val DATE_TEXT_SIZE_RATIO = 0.034f
-private const val DATE_LETTER_SPACING_EM = 0.22f
+private const val DATE_TEXT_SIZE_RATIO = 0.05f
+private const val DATE_LETTER_SPACING_EM = 0.18f
 
 /** Cell pitch for the clock (Stile 5, 5x7), as a fraction of the display's shorter side. */
 private const val CLOCK_PITCH_RATIO = 0.032f
@@ -50,16 +53,33 @@ private const val VALUE_PITCH_RATIO = 0.017f
 /** Top edge of the value glyph block, as a fraction of display height. */
 private const val VALUE_TOP_RATIO = 0.51f
 
-/** Trend arrow pitch, relative to the value's, so the arrow reads as the smaller mark. */
+/** Trend/icon glyph pitch, relative to the value's, so the mark reads as the smaller one. */
 private const val TREND_PITCH_RATIO = 0.8f
 
-/** Gap between the value and its trend arrow, in value cell pitches. Wider than one cell gap --
- *  at this font's smaller size a single-cell gap read as the arrow overlapping the last digit. */
+/** Gap between the value and its trend arrow/icon, in value cell pitches. Wider than one cell gap
+ *  -- at this font's smaller size a single-cell gap read as the mark overlapping the last digit. */
 private const val TREND_GAP_RATIO = 2.2f
 
 /** Extra tap-target padding above/below the value block, in value cell pitches -- the glyph box
  *  itself is a precise but uncomfortably small target to hit on a wrist. */
 private const val VALUE_TAP_PADDING_RATIO = 0.8f
+
+/** Hairline rule above the status row, spanning this fraction of the display's width, centred. */
+private const val RULE_LEFT_RATIO = 0.16f
+private const val RULE_RIGHT_RATIO = 0.84f
+private const val RULE_Y_RATIO = 0.685f
+private const val RULE_THICKNESS_RATIO = 0.0022f
+
+/** Status row: watch battery | phone battery | weather, each an icon+label pair (or, for
+ *  weather, the system complication) centred within its third of the row. */
+private const val STATUS_ROW_TOP_RATIO = 0.745f
+private const val STATUS_ICON_HEIGHT_RATIO = 0.046f
+private const val STATUS_LABEL_SIZE_RATIO = 0.040f
+private const val STATUS_ICON_LABEL_GAP_RATIO = 0.018f
+private const val STATUS_BATTERY_ICON_WIDTH_RATIO = 0.078f
+private const val STATUS_OUTLINE_WIDTH_RATIO = 0.0044f
+private val STATUS_COLUMN_CENTRE_RATIOS = floatArrayOf(0.235f, 0.5f, 0.765f)
+private val STATUS_DIVIDER_X_RATIOS = floatArrayOf(0.40f, 0.60f)
 
 class DotMatrixRenderer(
     surfaceHolder: SurfaceHolder,
@@ -67,6 +87,7 @@ class DotMatrixRenderer(
     private val watchState: WatchState,
     canvasType: Int,
     private val context: Context,
+    private val complicationSlotsManager: ComplicationSlotsManager,
 ) : Renderer.CanvasRenderer2<DotMatrixRenderer.Assets>(
     surfaceHolder,
     currentUserStyleRepository,
@@ -85,11 +106,24 @@ class DotMatrixRenderer(
     private val litPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FacePalette.LIT }
     private val unlitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FacePalette.UNLIT }
     private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FacePalette.ACCENT }
+    private val rulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FacePalette.RULE }
     private val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = FacePalette.SECONDARY
         typeface = ResourcesCompat.getFont(context, R.font.geist_mono_regular)
         letterSpacing = DATE_LETTER_SPACING_EM
         textAlign = Paint.Align.CENTER
+    }
+    private val statusLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = FacePalette.SECONDARY
+        typeface = ResourcesCompat.getFont(context, R.font.geist_mono_regular)
+    }
+    private val statusStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = FacePalette.SECONDARY
+        style = Paint.Style.STROKE
+    }
+    private val statusFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = FacePalette.SECONDARY
+        style = Paint.Style.FILL
     }
 
     private val dateFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
@@ -135,6 +169,9 @@ class DotMatrixRenderer(
             val snapshot = FaceStateHolder.getInstance(context).getSnapshot()
             val thresholds = FacePrefs(context).getThresholds()
             drawValue(canvas, bounds, snapshot, thresholds)
+            // Kept out of ambient with everything else in the status row: an always-on region
+            // this size is both a burn-in pattern and wasted power on the low-refresh AOD path.
+            drawStatusRow(canvas, bounds, zonedDateTime)
         }
     }
 
@@ -178,21 +215,24 @@ class DotMatrixRenderer(
         val (text, belowThreshold) = valueTextAndAlert(snapshot, thresholds)
         val valuePaint = if (belowThreshold) accentPaint else litPaint
 
-        // The trend arrow is glucose-specific -- battery/IOB/sensor-days have no direction to show.
-        val trendGlyph = if (displayMetric == DisplayMetric.GLUCOSE) {
-            snapshot.trend
+        // Glucose gets its trend arrow; the other three get a small fixed icon in the same slot
+        // (the same battery/reservoir/sensor-days marks the phone's Glyph Toy already uses for
+        // its own cycled display), so every non-glucose reading is still legible at a glance.
+        val markGlyph = when (displayMetric) {
+            DisplayMetric.GLUCOSE -> snapshot.trend
                 ?.takeIf { snapshot.staleness != Staleness.DEAD }
                 ?.let { PixelFont.arrowSets.getValue(PixelFont.ArrowStyle.CURRENT).getValue(it) }
-        } else {
-            null
+            DisplayMetric.PUMP_BATTERY -> PixelFont.batteryIcon
+            DisplayMetric.IOB -> PixelFont.reservoirIcon
+            DisplayMetric.SENSOR_DAYS -> PixelFont.sensorDaysIcon
         }
         val trendPitch = pitch * TREND_PITCH_RATIO
         val trendGap = pitch * TREND_GAP_RATIO
 
-        // Value and arrow are centred as one block: centring the value alone would put the arrow
-        // on top of the digits, since it hangs off the value's right edge.
+        // Value and mark are centred as one block: centring the value alone would put the mark on
+        // top of the digits, since it hangs off the value's right edge.
         val valueWidth = DotGrid.measureText(text, glyphs, pitch)
-        val trendWidth = if (trendGlyph == null) 0f else trendGap + PixelFont.ARROW_WIDTH * trendPitch
+        val trendWidth = if (markGlyph == null) 0f else trendGap + PixelFont.ARROW_WIDTH * trendPitch
         val x = bounds.exactCenterX() - (valueWidth + trendWidth) / 2f
 
         DotGrid.drawText(
@@ -207,12 +247,12 @@ class DotMatrixRenderer(
         )
 
         val valueHeight = DotGrid.measureHeight(glyphs, pitch)
-        if (trendGlyph != null) {
+        if (markGlyph != null) {
             DotGrid.drawGlyph(
                 canvas = canvas,
-                pattern = trendGlyph,
+                pattern = markGlyph,
                 x = x + valueWidth + trendGap,
-                y = y + (valueHeight - trendGlyph.size * trendPitch) / 2f,
+                y = y + (valueHeight - markGlyph.size * trendPitch) / 2f,
                 pitch = trendPitch,
                 litPaint = valuePaint,
                 unlitPaint = unlitPaint,
@@ -248,7 +288,9 @@ class DotMatrixRenderer(
             }
             DisplayMetric.IOB -> {
                 val units = snapshot.iobUnits
-                (units?.let(::formatIobUnits) ?: "-") to (units != null && units < thresholds.iobUnits)
+                // Whole units only -- a decimal reads as false precision at this size.
+                (units?.let { it.roundToInt().toString() } ?: "-") to
+                    (units != null && units < thresholds.iobUnits)
             }
             DisplayMetric.SENSOR_DAYS -> {
                 val days = snapshot.sensorDaysRemaining
@@ -257,13 +299,119 @@ class DotMatrixRenderer(
         }
     }
 
-    private fun formatIobUnits(units: Float): String {
-        val tenths = Math.round(units * 10)
-        return "${tenths / 10}.${tenths % 10}"
+    private fun drawStatusRow(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime) {
+        val shortSide = minOf(bounds.width(), bounds.height()).toFloat()
+        val hairline = maxOf(1f, shortSide * RULE_THICKNESS_RATIO)
+        val ruleY = bounds.top + bounds.height() * RULE_Y_RATIO
+        canvas.drawRect(
+            bounds.left + bounds.width() * RULE_LEFT_RATIO,
+            ruleY,
+            bounds.left + bounds.width() * RULE_RIGHT_RATIO,
+            ruleY + hairline,
+            rulePaint,
+        )
+
+        val rowTop = bounds.top + bounds.height() * STATUS_ROW_TOP_RATIO
+        val iconHeight = shortSide * STATUS_ICON_HEIGHT_RATIO
+        val gap = shortSide * STATUS_ICON_LABEL_GAP_RATIO
+        statusLabelPaint.textSize = shortSide * STATUS_LABEL_SIZE_RATIO
+        statusStrokePaint.strokeWidth = shortSide * STATUS_OUTLINE_WIDTH_RATIO
+
+        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+        val watchBattery = batteryManager
+            ?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            ?.takeIf { it in 0..100 }
+        val phoneBattery = FacePrefs(context).getPhoneBatteryPercent()
+
+        val batteryIconWidth = shortSide * STATUS_BATTERY_ICON_WIDTH_RATIO
+        drawStatusCell(
+            canvas = canvas,
+            columnCentre = bounds.left + bounds.width() * STATUS_COLUMN_CENTRE_RATIOS[0],
+            rowTop = rowTop,
+            iconHeight = iconHeight,
+            gap = gap,
+            iconWidth = batteryIconWidth,
+            label = watchBattery?.let { "$it%" } ?: "-",
+        ) { iconX, iconWidth -> drawBatteryIcon(canvas, iconX, rowTop, iconWidth, iconHeight, watchBattery ?: 0) }
+
+        val phoneIconWidth = iconHeight * 0.6f
+        drawStatusCell(
+            canvas = canvas,
+            columnCentre = bounds.left + bounds.width() * STATUS_COLUMN_CENTRE_RATIOS[1],
+            rowTop = rowTop,
+            iconHeight = iconHeight,
+            gap = gap,
+            iconWidth = phoneIconWidth,
+            label = phoneBattery?.let { "$it%" } ?: "-",
+        ) { iconX, iconWidth ->
+            drawPhoneIcon(canvas, iconX, rowTop - iconHeight * 0.05f, iconWidth, iconHeight * 1.1f)
+        }
+
+        // Weather: a real system complication, not our dot font -- there is no dot-matrix weather
+        // data source, and this is the one cell that isn't hand-drawn. It renders itself within
+        // the bounds given to its slot in DotMatrixWatchFaceService.createComplicationSlotsManager.
+        complicationSlotsManager[WEATHER_COMPLICATION_SLOT_ID]?.render(canvas, zonedDateTime, renderParameters)
+
+        for (xRatio in STATUS_DIVIDER_X_RATIOS) {
+            val x = bounds.left + bounds.width() * xRatio
+            canvas.drawRect(
+                x,
+                rowTop - iconHeight * 0.12f,
+                x + hairline,
+                rowTop + iconHeight * 1.12f,
+                rulePaint,
+            )
+        }
+    }
+
+    /** Draws an icon + label pair centred as one block within [columnCentre]'s third of the row --
+     *  mirrors the now-removed Minimal Grid face's cell-centring approach. */
+    private fun drawStatusCell(
+        canvas: Canvas,
+        columnCentre: Float,
+        rowTop: Float,
+        iconHeight: Float,
+        gap: Float,
+        iconWidth: Float,
+        label: String,
+        drawIcon: (iconX: Float, iconWidth: Float) -> Unit,
+    ) {
+        val labelWidth = statusLabelPaint.measureText(label)
+        val blockWidth = iconWidth + gap + labelWidth
+        val iconX = columnCentre - blockWidth / 2f
+        drawIcon(iconX, iconWidth)
+        val labelBaselineY = rowTop + iconHeight / 2f - (statusLabelPaint.ascent() + statusLabelPaint.descent()) / 2f
+        canvas.drawText(label, iconX + iconWidth + gap, labelBaselineY, statusLabelPaint)
+    }
+
+    /** Minimal line battery glyph: outline + a small nub, fill proportional to [level]. */
+    private fun drawBatteryIcon(canvas: Canvas, x: Float, y: Float, w: Float, h: Float, level: Int) {
+        val nubWidth = maxOf(2f, w * 0.12f)
+        val cornerRadius = h * 0.22f
+        canvas.drawRoundRect(RectF(x, y, x + w - nubWidth, y + h), cornerRadius, cornerRadius, statusStrokePaint)
+        val nubHeight = h * 0.4f
+        canvas.drawRoundRect(
+            RectF(x + w - nubWidth, y + (h - nubHeight) / 2f, x + w, y + (h + nubHeight) / 2f),
+            2f, 2f, statusFillPaint,
+        )
+        val pad = 3f
+        val fillWidth = (w - nubWidth - pad * 2f) * (level.coerceIn(0, 100) / 100f)
+        if (fillWidth > 0f) {
+            canvas.drawRect(x + pad, y + pad, x + pad + fillWidth, y + h - pad, statusFillPaint)
+        }
+    }
+
+    /** Minimal line phone silhouette: rounded rect + a home-indicator line. */
+    private fun drawPhoneIcon(canvas: Canvas, x: Float, y: Float, w: Float, h: Float) {
+        val cornerRadius = w * 0.22f
+        canvas.drawRoundRect(RectF(x, y, x + w, y + h), cornerRadius, cornerRadius, statusStrokePaint)
+        val lineY = y + h - h * 0.12f
+        canvas.drawLine(x + w * 0.32f, lineY, x + w * 0.68f, lineY, statusStrokePaint)
     }
 
     override fun renderHighlightLayer(canvas: Canvas, bounds: Rect, zonedDateTime: ZonedDateTime, sharedAssets: Assets) {
-        // No complication slots on this face yet, so there is nothing to highlight in the editor.
+        // Weather is the only complication slot, and it isn't user-reassignable (see
+        // DotMatrixWatchFaceService for why), so there is nothing useful to highlight in an editor.
         canvas.drawColor(android.graphics.Color.TRANSPARENT)
     }
 }

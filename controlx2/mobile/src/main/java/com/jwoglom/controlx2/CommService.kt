@@ -195,6 +195,10 @@ class CommService : Service(), CommServiceCallbacks {
     override fun onCreate() {
         super.onCreate()
 
+        // Reports this phone's battery level to the watch face's tap-cycled reading, regardless
+        // of device role -- placed before the PUMP_HOST short-circuit below on purpose.
+        it.mattia.controlx2face.PhoneBatteryReporter.register(this)
+
         // Timber already set in up MUA, but for good measure:
         setupTimber("MWC",
             context = this,
@@ -866,6 +870,7 @@ class CommService : Service(), CommServiceCallbacks {
 
     override fun onDestroy() {
         super.onDestroy()
+        it.mattia.controlx2face.PhoneBatteryReporter.unregister(this)
         unregisterAppReloadShutdownHook(appReloadShutdownHook)
         pumpCommHandler?.stopHistoryLogSyncWorker()
         scope.cancel()

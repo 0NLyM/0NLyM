@@ -83,4 +83,11 @@ class FacePrefs(context: Context) {
             apply()
         }
     }
+
+    /** Null until the phone's first battery report arrives (see FaceMessageListenerService). */
+    fun getPhoneBatteryPercent(): Int? = prefs.getInt("phone_battery_percent", -1).takeIf { it >= 0 }
+
+    fun setPhoneBatteryPercent(percent: Int) {
+        prefs.edit().putInt("phone_battery_percent", percent).apply()
+    }
 }

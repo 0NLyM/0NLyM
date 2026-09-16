@@ -323,6 +323,7 @@ object PixelFont {
 
     /** A 7-row colon matching STYLE5's height, drawn separately from [statusColon] (4 rows) so it
      *  lines up with a taller digit; kept here rather than folded into [statusColon] since every
-     *  other style is 4-5 rows tall and would mis-space against a 7-row separator. */
-    val clockSeparator7Row: List<String> = listOf("0", "0", "1", "0", "1", "0", "0")
+     *  other style is 4-5 rows tall and would mis-space against a 7-row separator. Four
+     *  consecutive lit rows (not the usual two-dot colon) to match the designer's reference photo. */
+    val clockSeparator7Row: List<String> = listOf("0", "0", "1", "1", "1", "1", "0")
 }
