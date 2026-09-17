@@ -29,10 +29,13 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Nothing there is sub-minute on this face, so it only needs redrawing once a minute; live data
- * changes and value taps drive extra redraws through [Renderer.invalidate] rather than polling.
+ * Interactive mode redraws once a second so the clock separator can blink with it (see
+ * [DotMatrixRenderer.drawClock]); this only governs interactive frames -- ambient still ticks on
+ * its own system-driven cadence (once a minute) regardless of this value, and the separator
+ * doesn't blink there anyway. Live data changes and value taps drive extra redraws through
+ * [Renderer.invalidate] on top of this.
  */
-private const val FRAME_PERIOD_MS = 60_000L
+private const val FRAME_PERIOD_MS = 1_000L
 
 /** Date line: small tracked-out caps, top edge as a fraction of display height. */
 private const val DATE_TOP_RATIO = 0.19f
@@ -189,8 +192,16 @@ class DotMatrixRenderer(
         val y = bounds.top + bounds.height() * CLOCK_TOP_RATIO
         val unlit = if (ambient) null else unlitPaint
         // Ambient stays monochrome (see FacePalette: colour is a signal, not decoration, and the
-        // separator's red is purely a style choice, not one) -- only interactive gets the accent.
-        val separatorPaint = if (ambient) litPaint else accentPaint
+        // separator's red is purely a style choice, not one) -- only interactive gets the accent,
+        // and only interactive blinks it with the seconds (ambient redraws once a minute, too
+        // coarse to blink anything meaningfully). Off-phase reuses unlitPaint for both the lit and
+        // unlit cells, so the whole separator reads as uniformly dark rather than red.
+        val blinkOn = zonedDateTime.second % 2 == 0
+        val separatorPaint = when {
+            ambient -> litPaint
+            blinkOn -> accentPaint
+            else -> unlitPaint
+        }
 
         var cursor = bounds.exactCenterX() - width / 2f
         for (c in clockText) {
