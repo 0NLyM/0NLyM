@@ -64,9 +64,10 @@ private const val TREND_GAP_RATIO = 2.2f
  *  itself is a precise but uncomfortably small target to hit on a wrist. */
 private const val VALUE_TAP_PADDING_RATIO = 0.8f
 
-/** A single hairline dash to the left of the value block, vertically centred on it (aligned with
+/** Hairline dashes flanking the value block on both sides, vertically centred on it (aligned with
  *  the glucose widget's own Y axis, not hung below the whole row). */
 private const val VALUE_RULE_LEFT_RATIO = 0.16f
+private const val VALUE_RULE_RIGHT_RATIO = 0.84f
 private const val VALUE_RULE_GAP_PITCHES = 2f
 private const val RULE_THICKNESS_RATIO = 0.0022f
 
@@ -267,14 +268,21 @@ class DotMatrixRenderer(
             y + valueHeight + padding,
         )
 
-        // A single hairline dash to the left of the value, vertically centred on it -- aligned
+        // Hairline dashes flanking the value on both sides, vertically centred on it -- aligned
         // with the widget's own Y axis rather than hung below the whole row.
         val dashY = y + valueHeight / 2f
         val hairline = maxOf(1f, shortSide * RULE_THICKNESS_RATIO)
-        val dashLeft = bounds.left + bounds.width() * VALUE_RULE_LEFT_RATIO
-        val dashRight = x - pitch * VALUE_RULE_GAP_PITCHES
-        if (dashRight > dashLeft) {
-            canvas.drawRect(dashLeft, dashY - hairline / 2f, dashRight, dashY + hairline / 2f, rulePaint)
+        val blockRight = x + valueWidth + trendWidth
+        val dashGap = pitch * VALUE_RULE_GAP_PITCHES
+        val dashLeftEnd = x - dashGap
+        val dashLeftStart = bounds.left + bounds.width() * VALUE_RULE_LEFT_RATIO
+        if (dashLeftEnd > dashLeftStart) {
+            canvas.drawRect(dashLeftStart, dashY - hairline / 2f, dashLeftEnd, dashY + hairline / 2f, rulePaint)
+        }
+        val dashRightStart = blockRight + dashGap
+        val dashRightEnd = bounds.left + bounds.width() * VALUE_RULE_RIGHT_RATIO
+        if (dashRightEnd > dashRightStart) {
+            canvas.drawRect(dashRightStart, dashY - hairline / 2f, dashRightEnd, dashY + hairline / 2f, rulePaint)
         }
     }
 
