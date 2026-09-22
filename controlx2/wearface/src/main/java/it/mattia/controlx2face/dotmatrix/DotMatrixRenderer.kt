@@ -37,8 +37,12 @@ import kotlin.math.roundToInt
  */
 private const val FRAME_PERIOD_MS = 1_000L
 
+/** Weather widget: the face's topmost element, centred -- everything else below is shifted down
+ *  to make room for it (see DATE_TOP_RATIO onward). */
+private const val WEATHER_TOP_RATIO = 0.07f
+
 /** Date line: small tracked-out caps, top edge as a fraction of display height. */
-private const val DATE_TOP_RATIO = 0.19f
+private const val DATE_TOP_RATIO = 0.235f
 private const val DATE_TEXT_SIZE_RATIO = 0.05f
 private const val DATE_LETTER_SPACING_EM = 0.18f
 
@@ -46,7 +50,7 @@ private const val DATE_LETTER_SPACING_EM = 0.18f
 private const val CLOCK_PITCH_RATIO = 0.032f
 
 /** Clock top edge, as a fraction of display height. */
-private const val CLOCK_TOP_RATIO = 0.26f
+private const val CLOCK_TOP_RATIO = 0.30f
 
 /** Cell pitch for the tappable value (Stile 3/ORIGINAL, 5x7) -- smaller than the clock so the
  *  two read as headline/detail rather than as two clocks. */
@@ -54,7 +58,7 @@ private const val VALUE_PITCH_RATIO = 0.017f
 
 /** Top edge of the value glyph block, as a fraction of display height -- kept a clear gap below
  *  the clock rather than the two reading as one crowded block. */
-private const val VALUE_TOP_RATIO = 0.55f
+private const val VALUE_TOP_RATIO = 0.585f
 
 /** Trend/icon glyph pitch, relative to the value's, so the mark reads as the smaller one. */
 private const val TREND_PITCH_RATIO = 0.8f
@@ -74,16 +78,17 @@ private const val VALUE_RULE_RIGHT_RATIO = 0.84f
 private const val VALUE_RULE_GAP_PITCHES = 2f
 private const val RULE_THICKNESS_RATIO = 0.0022f
 
-/** Status row: watch battery | phone battery | weather, each an icon+label pair (or, for
- *  weather, the system complication) centred within its third of the row. */
-private const val STATUS_ROW_TOP_RATIO = 0.745f
+/** Status row: watch battery | phone battery, each an icon+label pair centred within its half of
+ *  the row -- weather moved out to its own widget at the top (see WEATHER_TOP_RATIO), leaving
+ *  two columns instead of three. */
+private const val STATUS_ROW_TOP_RATIO = 0.775f
 private const val STATUS_ICON_HEIGHT_RATIO = 0.046f
 private const val STATUS_LABEL_SIZE_RATIO = 0.040f
 private const val STATUS_ICON_LABEL_GAP_RATIO = 0.018f
 private const val STATUS_BATTERY_ICON_WIDTH_RATIO = 0.078f
 private const val STATUS_OUTLINE_WIDTH_RATIO = 0.0044f
-private val STATUS_COLUMN_CENTRE_RATIOS = floatArrayOf(0.235f, 0.5f, 0.765f)
-private val STATUS_DIVIDER_X_RATIOS = floatArrayOf(0.40f, 0.60f)
+private val STATUS_COLUMN_CENTRE_RATIOS = floatArrayOf(0.35f, 0.65f)
+private val STATUS_DIVIDER_X_RATIOS = floatArrayOf(0.5f)
 
 class DotMatrixRenderer(
     surfaceHolder: SurfaceHolder,
@@ -163,6 +168,7 @@ class DotMatrixRenderer(
             displayMetric = DisplayMetric.GLUCOSE
             valueTapRect = null
         } else {
+            drawWeatherWidget(canvas, bounds)
             drawDate(canvas, bounds, zonedDateTime)
         }
 
@@ -175,6 +181,31 @@ class DotMatrixRenderer(
             // Kept out of ambient with everything else in the status row: an always-on region
             // this size is both a burn-in pattern and wasted power on the low-refresh AOD path.
             drawStatusRow(canvas, bounds)
+        }
+    }
+
+    /** The face's topmost element: a small sun icon + temperature, centred. See [WeatherFetcher]
+     *  for where the temperature actually comes from -- there's no system data source a
+     *  programmatic watch face can read, so this is a direct best-effort fetch instead. */
+    private fun drawWeatherWidget(canvas: Canvas, bounds: Rect) {
+        val shortSide = minOf(bounds.width(), bounds.height()).toFloat()
+        val iconHeight = shortSide * STATUS_ICON_HEIGHT_RATIO
+        val gap = shortSide * STATUS_ICON_LABEL_GAP_RATIO
+        statusLabelPaint.textSize = shortSide * STATUS_LABEL_SIZE_RATIO
+        statusStrokePaint.strokeWidth = shortSide * STATUS_OUTLINE_WIDTH_RATIO
+
+        val rowTop = bounds.top + bounds.height() * WEATHER_TOP_RATIO
+        val celsius = FacePrefs(context).getWeatherTempCelsius()
+        drawStatusCell(
+            canvas = canvas,
+            columnCentre = bounds.exactCenterX(),
+            rowTop = rowTop,
+            iconHeight = iconHeight,
+            gap = gap,
+            iconWidth = iconHeight,
+            label = celsius?.let { "$it°" } ?: "-°",
+        ) { iconX, iconWidth ->
+            drawWeatherIcon(canvas, iconX + iconWidth / 2f, rowTop + iconHeight / 2f, iconWidth * 0.55f)
         }
     }
 
@@ -191,27 +222,32 @@ class DotMatrixRenderer(
         val width = DotGrid.measureText(clockText, glyphs, pitch)
         val y = bounds.top + bounds.height() * CLOCK_TOP_RATIO
         val unlit = if (ambient) null else unlitPaint
-        // Ambient stays monochrome (see FacePalette: colour is a signal, not decoration, and the
-        // separator's red is purely a style choice, not one) -- only interactive gets the accent,
-        // and only interactive blinks it with the seconds (ambient redraws once a minute, too
-        // coarse to blink anything meaningfully). Off-phase reuses unlitPaint for both the lit and
-        // unlit cells, so the whole separator reads as uniformly dark rather than red.
+        // Ambient stays monochrome (see FacePalette: colour is a signal, not decoration, and both
+        // the separator's and the minutes' red are purely style choices, not signals) -- only
+        // interactive gets either accent, and only interactive blinks the separator with the
+        // seconds (ambient redraws once a minute, too coarse to blink anything meaningfully).
+        // Off-phase reuses unlitPaint for both the lit and unlit cells, so the whole separator
+        // reads as uniformly dark rather than red.
         val blinkOn = zonedDateTime.second % 2 == 0
         val separatorPaint = when {
             ambient -> litPaint
             blinkOn -> accentPaint
             else -> unlitPaint
         }
+        val minutesPaint = if (ambient) litPaint else accentPaint
 
         var cursor = bounds.exactCenterX() - width / 2f
+        var afterSeparator = false
         for (c in clockText) {
             if (c == ':') {
+                afterSeparator = true
                 DotGrid.drawGlyph(canvas, PixelFont.clockSeparator7Row, cursor, y, pitch, separatorPaint, unlit)
                 cursor += (PixelFont.STATUS_COLON_WIDTH + DotGrid.GLYPH_GAP_CELLS) * pitch
             } else {
                 val pattern = glyphs.glyphs[c]
                 if (pattern != null) {
-                    DotGrid.drawGlyph(canvas, pattern, cursor, y, pitch, litPaint, unlit)
+                    val digitPaint = if (afterSeparator) minutesPaint else litPaint
+                    DotGrid.drawGlyph(canvas, pattern, cursor, y, pitch, digitPaint, unlit)
                 }
                 cursor += (glyphs.width + DotGrid.GLYPH_GAP_CELLS) * pitch
             }
@@ -366,26 +402,6 @@ class DotMatrixRenderer(
             label = phoneBattery?.let { "$it%" } ?: "-",
         ) { iconX, iconWidth ->
             drawPhoneIcon(canvas, iconX, rowTop - iconHeight * 0.05f, iconWidth, iconHeight * 1.1f)
-        }
-
-        // Weather: a plain sun icon, no live temperature -- "-°" reads the same as the other
-        // two cells' "-" for a value that isn't available. The androidx.wear.watchface
-        // complications API has no system weather data source to bind to (that only exists as a
-        // [WEATHER.*] expression in the newer declarative Watch Face Format, which this
-        // programmatic face doesn't use) and there's no configuration editor for the wearer to
-        // pick a third-party weather provider either. A live reading needs a real weather API
-        // integration, which is its own separate task.
-        val weatherIconWidth = iconHeight
-        drawStatusCell(
-            canvas = canvas,
-            columnCentre = bounds.left + bounds.width() * STATUS_COLUMN_CENTRE_RATIOS[2],
-            rowTop = rowTop,
-            iconHeight = iconHeight,
-            gap = gap,
-            iconWidth = weatherIconWidth,
-            label = "-°",
-        ) { iconX, iconWidth ->
-            drawWeatherIcon(canvas, iconX + iconWidth / 2f, rowTop + iconHeight / 2f, iconWidth * 0.55f)
         }
 
         for (xRatio in STATUS_DIVIDER_X_RATIOS) {

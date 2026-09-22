@@ -11,6 +11,7 @@ import androidx.wear.watchface.WatchFaceService
 import androidx.wear.watchface.WatchFaceType
 import androidx.wear.watchface.WatchState
 import androidx.wear.watchface.style.CurrentUserStyleRepository
+import it.mattia.controlx2face.data.WeatherRefreshLoop
 
 /**
  * "Dot Matrix" -- the watch-side counterpart to the phone's Glyph Matrix toy, drawing the time,
@@ -21,11 +22,12 @@ import androidx.wear.watchface.style.CurrentUserStyleRepository
  * remaining (see [DotMatrixRenderer.handleValueTap]), always reset back to glucose on ambient
  * entry.
  *
- * No complication slots: the status row's weather cell is a plain drawn icon rather than a real
+ * No complication slots: the weather widget is a plain drawn icon rather than a real
  * complication, since the androidx.wear.watchface complications API has no system weather data
  * source to bind it to (that only exists as a [WEATHER.*] expression in the declarative Watch
  * Face Format, which this programmatic face doesn't use) and there's no configuration editor for
- * the wearer to pick a third-party provider either -- see DotMatrixRenderer.drawWeatherIcon.
+ * the wearer to pick a third-party provider either -- its temperature instead comes from
+ * [WeatherRefreshLoop]'s own best-effort fetch, started below.
  */
 class DotMatrixWatchFaceService : WatchFaceService() {
 
@@ -35,6 +37,7 @@ class DotMatrixWatchFaceService : WatchFaceService() {
         complicationSlotsManager: ComplicationSlotsManager,
         currentUserStyleRepository: CurrentUserStyleRepository,
     ): WatchFace {
+        WeatherRefreshLoop.start(this)
         val renderer = DotMatrixRenderer(
             surfaceHolder = surfaceHolder,
             currentUserStyleRepository = currentUserStyleRepository,

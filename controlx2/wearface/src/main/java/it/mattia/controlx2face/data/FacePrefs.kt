@@ -90,4 +90,14 @@ class FacePrefs(context: Context) {
     fun setPhoneBatteryPercent(percent: Int) {
         prefs.edit().putInt("phone_battery_percent", percent).apply()
     }
+
+    /** Null until the first successful fetch (see WeatherFetcher). Int.MIN_VALUE, not -1, is the
+     *  "absent" sentinel here -- unlike the percentages above, a negative temperature is a real
+     *  reading, not a missing one. */
+    fun getWeatherTempCelsius(): Int? =
+        prefs.getInt("weather_temp_celsius", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+
+    fun setWeatherTempCelsius(celsius: Int) {
+        prefs.edit().putInt("weather_temp_celsius", celsius).apply()
+    }
 }
