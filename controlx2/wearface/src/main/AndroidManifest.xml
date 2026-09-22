@@ -7,8 +7,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        Only for the Dot Matrix weather widget's own best-effort fetch (IP geolocation + a free
-        weather lookup -- see WeatherFetcher.kt); no other part of this module touches the
+        Only for the Dot Matrix weather widget's own best-effort fetch (IP geolocation plus a free
+        weather lookup, see WeatherFetcher.kt); no other part of this module touches the
         network. A normal (not dangerous) permission, so it needs no runtime prompt.
     -->
     <uses-permission android:name="android.permission.INTERNET" />

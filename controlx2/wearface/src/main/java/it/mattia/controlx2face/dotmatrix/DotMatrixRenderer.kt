@@ -29,13 +29,11 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
- * Interactive mode redraws once a second so the clock separator can blink with it (see
- * [DotMatrixRenderer.drawClock]); this only governs interactive frames -- ambient still ticks on
- * its own system-driven cadence (once a minute) regardless of this value, and the separator
- * doesn't blink there anyway. Live data changes and value taps drive extra redraws through
- * [Renderer.invalidate] on top of this.
+ * Nothing on this face is sub-minute any more (the clock separator's blink was dropped along
+ * with the separator itself), so it only needs redrawing once a minute; live data changes and
+ * value taps drive extra redraws through [Renderer.invalidate] on top of this.
  */
-private const val FRAME_PERIOD_MS = 1_000L
+private const val FRAME_PERIOD_MS = 60_000L
 
 /** Weather widget: the face's topmost element, centred -- everything else below is shifted down
  *  to make room for it (see DATE_TOP_RATIO onward). */
@@ -222,31 +220,19 @@ class DotMatrixRenderer(
         val width = DotGrid.measureText(clockText, glyphs, pitch)
         val y = bounds.top + bounds.height() * CLOCK_TOP_RATIO
         val unlit = if (ambient) null else unlitPaint
-        // Ambient stays monochrome (see FacePalette: colour is a signal, not decoration, and both
-        // the separator's and the minutes' red are purely style choices, not signals) -- only
-        // interactive gets either accent, and only interactive blinks the separator with the
-        // seconds (ambient redraws once a minute, too coarse to blink anything meaningfully).
-        // Off-phase reuses unlitPaint for both the lit and unlit cells, so the whole separator
-        // reads as uniformly dark rather than red.
-        val blinkOn = zonedDateTime.second % 2 == 0
-        val separatorPaint = when {
-            ambient -> litPaint
-            blinkOn -> accentPaint
-            else -> unlitPaint
-        }
-        val minutesPaint = if (ambient) litPaint else accentPaint
+        // Ambient stays monochrome (see FacePalette: colour is a signal, not decoration, and the
+        // clock's red is purely a style choice, not one) -- only interactive gets the accent.
+        val digitPaint = if (ambient) litPaint else accentPaint
 
         var cursor = bounds.exactCenterX() - width / 2f
-        var afterSeparator = false
         for (c in clockText) {
             if (c == ':') {
-                afterSeparator = true
-                DotGrid.drawGlyph(canvas, PixelFont.clockSeparator7Row, cursor, y, pitch, separatorPaint, unlit)
+                // No separator dots drawn -- just the blank gap they used to occupy, so HH and MM
+                // still read as two groups without the dots themselves.
                 cursor += (PixelFont.STATUS_COLON_WIDTH + DotGrid.GLYPH_GAP_CELLS) * pitch
             } else {
                 val pattern = glyphs.glyphs[c]
                 if (pattern != null) {
-                    val digitPaint = if (afterSeparator) minutesPaint else litPaint
                     DotGrid.drawGlyph(canvas, pattern, cursor, y, pitch, digitPaint, unlit)
                 }
                 cursor += (glyphs.width + DotGrid.GLYPH_GAP_CELLS) * pitch

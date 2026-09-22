@@ -319,12 +319,8 @@ object PixelFont {
     )
 
     val statusColon: List<String> = listOf("0", "1", "0", "1")
-    const val STATUS_COLON_WIDTH = 1
 
-    /** A 7-row colon matching STYLE5's height, drawn separately from [statusColon] (4 rows) so it
-     *  lines up with a taller digit; kept here rather than folded into [statusColon] since every
-     *  other style is 4-5 rows tall and would mis-space against a 7-row separator. Two adjacent
-     *  pairs split by a single unlit row in the middle -- the pairs stay fused, only the middle
-     *  gap separates them -- raised one row from the digit's bottom edge per a follow-up tweak. */
-    val clockSeparator7Row: List<String> = listOf("0", "1", "1", "0", "1", "1", "0")
+    /** Width, in cells, that a ':' occupies wherever it's drawn (or, for the Dot Matrix face's
+     *  clock, left as a blank gap of this same width instead -- see DotMatrixRenderer.drawClock). */
+    const val STATUS_COLON_WIDTH = 1
 }
